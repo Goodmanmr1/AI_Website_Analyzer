@@ -20,7 +20,8 @@ class WebsiteFetcher:
         
         for attempt in range(max_retries + 1):
             try:
-                headers = {'User-Agent': config.USER_AGENT}
+                # Use improved headers from config for better bot detection bypass
+                headers = getattr(config, 'DEFAULT_HEADERS', {'User-Agent': config.USER_AGENT})
                 response = requests.get(
                     self.url, 
                     headers=headers, 
@@ -43,6 +44,16 @@ class WebsiteFetcher:
                     time.sleep(retry_delay)
                     continue
                 raise Exception(config.ERROR_MESSAGES.get('network_error', 'Network connection failed'))
+            except requests.exceptions.HTTPError as e:
+                # Handle specific HTTP errors
+                if e.response.status_code == 403:
+                    raise Exception(config.ERROR_MESSAGES.get('forbidden', 'Website is blocking automated access (403 Forbidden)'))
+                elif e.response.status_code == 404:
+                    raise Exception(config.ERROR_MESSAGES.get('not_found', 'Page not found (404)'))
+                elif e.response.status_code >= 500:
+                    raise Exception(config.ERROR_MESSAGES.get('server_error', 'Website server error'))
+                else:
+                    raise Exception(f"HTTP {e.response.status_code}: {str(e)}")
             except requests.exceptions.RequestException as e:
                 raise Exception(f"Failed to fetch URL: {str(e)}")
             except Exception as e:
