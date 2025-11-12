@@ -32,18 +32,17 @@ class AIOptimizationAnalyzer:
     
     def _analyze_chunkability(self):
         """Analyze content chunkability for AI processing"""
-        if not self.text:
-            return 0
+        # Use HTML paragraph tags instead of text splitting
+        paragraphs = self.fetcher.soup.find_all('p')
         
-        # Split into paragraphs
-        paragraphs = [p.strip() for p in self.text.split('\n\n') if p.strip()]
         if not paragraphs:
             return 0
         
         # Ideal paragraph length: 50-150 words
         ideal_chunks = 0
         for para in paragraphs:
-            word_count = len(para.split())
+            text = para.get_text(strip=True)
+            word_count = len(text.split())
             if 50 <= word_count <= 150:
                 ideal_chunks += 1
         
@@ -193,20 +192,32 @@ class AIOptimizationAnalyzer:
         return round(score)
     
     def _generate_findings(self, scores):
-        """Generate key findings"""
+        """Generate key findings with specific details"""
         findings = []
         
-        if scores['chunkability'] < 50:
-            findings.append("Content chunks are too long or too short for optimal AI processing")
+        # Chunkability with details
+        paragraphs = self.fetcher.soup.find_all('p')
+        if paragraphs:
+            ideal_count = sum(1 for p in paragraphs if 50 <= len(p.get_text(strip=True).split()) <= 150)
+            if scores['chunkability'] < 50:
+                findings.append(f"Only {ideal_count} of {len(paragraphs)} paragraphs ({scores['chunkability']}%) are in the ideal 50-150 word range for AI processing")
+            else:
+                findings.append(f"Good: {ideal_count} of {len(paragraphs)} paragraphs ({scores['chunkability']}%) are optimally sized for AI")
         
+        # Q&A format
+        question_count = self.text.count('?')
         if scores['qa_format'] < 30:
-            findings.append("Content lacks clear answer potential for AI systems")
+            findings.append(f"Limited Q&A format: Found only {question_count} questions in {self.word_count} words")
         
+        # Semantic clarity
         if scores['semantic_clarity'] < 70:
-            findings.append("Semantic structure needs improvement for AI understanding")
+            findings.append(f"Readability score: {scores['semantic_clarity']}% - content may be too complex or too simple for AI processing")
         
+        # Factual density
         if scores['factual_density'] < 50:
-            findings.append("Low factual density - add more specific data and statistics")
+            findings.append(f"Low factual density ({scores['factual_density']}%) - add more specific data, statistics, and dates")
+        elif scores['factual_density'] > 90:
+            findings.append(f"Excellent factual density ({scores['factual_density']}%) - rich in data and statistics")
         
         return findings
     
