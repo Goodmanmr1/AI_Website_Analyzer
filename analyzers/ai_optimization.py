@@ -96,49 +96,101 @@ class AIOptimizationAnalyzer:
         return round(score, 1)
     
     def _analyze_factual_density(self):
-        """Analyze factual density (facts per content)"""
-        if not self.text:
+        """Analyze factual density (facts per content) - FIXED"""
+        if not self.text or self.word_count < 50:
             return 0
         
-        # Count factual indicators
-        numbers = len(re.findall(r'\b\d+\.?\d*%?\b', self.text))
-        dates = len(re.findall(r'\b\d{4}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b', self.text))
-        statistics = len(re.findall(r'\b\d+\.?\d*\s*(percent|%|million|billion|thousand)\b', self.text, re.IGNORECASE))
+        # CRITICAL FIX #4: Filter out non-factual numbers
+        text_cleaned = self.text
         
-        total_facts = numbers + dates + statistics
+        # Remove copyright years (e.g., "© 2024", "Copyright 2023")
+        text_cleaned = re.sub(r'©\s*20\d{2}', '', text_cleaned)
+        text_cleaned = re.sub(r'\b(copyright|©)\s+20\d{2}\b', '', text_cleaned, flags=re.IGNORECASE)
+        
+        # Remove common non-factual small numbers (1-10) when used as list items or standalone
+        text_cleaned = re.sub(r'\b([1-9]|10)\.\s', '', text_cleaned)  # List items like "1. "
+        
+        # Remove navigation/pagination numbers
+        text_cleaned = re.sub(r'\b(page|step)\s+\d+\b', '', text_cleaned, flags=re.IGNORECASE)
+        
+        # Now count meaningful numbers (2+ digits or percentages)
+        meaningful_numbers = len(re.findall(r'\b\d{2,}\.?\d*%?\b', text_cleaned))
+        
+        # Count dates more carefully (4-digit years, but not in URLs or standalone)
+        dates = len(re.findall(r'\b(19|20)\d{2}\b(?!\s*©)', text_cleaned))
+        
+        # Count statistics (numbers with context)
+        statistics = len(re.findall(r'\b\d+\.?\d*\s*(percent|%|million|billion|thousand|dozen)\b', text_cleaned, re.IGNORECASE))
+        
+        # Count currency/prices
+        currency = len(re.findall(r'[$€£¥]\s*\d+', text_cleaned))
+        
+        total_facts = meaningful_numbers + dates + statistics + currency
         
         # Facts per 100 words
         facts_per_100 = (total_facts / max(self.word_count, 1)) * 100
         
-        # Score: ideal is 5-15 facts per 100 words
-        if 5 <= facts_per_100 <= 15:
+        # IMPROVED: More nuanced scoring
+        # Ideal is 3-12 facts per 100 words (adjusted from original)
+        if 3 <= facts_per_100 <= 12:
             score = 100
-        elif facts_per_100 < 5:
-            score = (facts_per_100 / 5) * 100
+        elif facts_per_100 < 3:
+            # Scale linearly from 0 to 100
+            score = (facts_per_100 / 3) * 100
         else:
-            score = max(50, 100 - (facts_per_100 - 15) * 5)
+            # Gentle penalty for being too data-heavy
+            score = max(60, 100 - (facts_per_100 - 12) * 3)
         
         return round(score, 2)
     
     def _analyze_semantic_clarity(self):
-        """Analyze semantic clarity using readability"""
+        """Analyze semantic clarity using readability - FIXED error handling"""
         if not self.text or self.word_count < 100:
             return 0
         
+        # CRITICAL FIX #5: Better error handling for readability
         try:
+            # Clean the text before analysis
+            # Remove URLs which can confuse readability scores
+            text_for_analysis = re.sub(r'https?://\S+', '', self.text)
+            
+            # Remove excessive whitespace
+            text_for_analysis = ' '.join(text_for_analysis.split())
+            
+            # Ensure we have enough sentences
+            sentences = re.split(r'[.!?]+', text_for_analysis)
+            sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+            
+            if len(sentences) < 3:
+                # Not enough sentences for reliable analysis
+                return 50
+            
             # Flesch Reading Ease: 60-70 is ideal (8th-9th grade)
-            reading_ease = flesch_reading_ease(self.text)
+            reading_ease = flesch_reading_ease(text_for_analysis)
             
             # Convert to 0-100 score (60-70 = 100, outside range = lower)
             if 60 <= reading_ease <= 70:
                 score = 100
             elif reading_ease < 60:
+                # Harder to read
                 score = max(0, (reading_ease / 60) * 100)
             else:
+                # Too easy/simple
                 score = max(50, 100 - (reading_ease - 70))
             
             return round(score, 2)
-        except:
+            
+        except ZeroDivisionError:
+            # Happens when text is too short or has no sentences
+            return 40
+        except ValueError as e:
+            # Happens with unusual text patterns
+            print(f"Readability calculation error: {e}")
+            return 50
+        except Exception as e:
+            # Catch-all for other issues
+            print(f"Unexpected readability error: {e}")
+            # Return a neutral score rather than failing
             return 50
     
     def _analyze_content_structure(self):
