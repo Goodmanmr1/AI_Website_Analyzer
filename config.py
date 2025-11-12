@@ -1,19 +1,16 @@
-"""Configuration settings for AI Website Grader - Snowflake Edition"""
+"""Configuration settings for AI Website Grader"""
 
 import os
 
 # ============================================================================
-# Snowflake-Specific Configuration
+# API Configuration
 # ============================================================================
 
-# Check if running in Snowflake environment
-IS_SNOWFLAKE = os.getenv('SNOWFLAKE_ACCOUNT') is not None
-
-# API Configuration
-# For Snowflake: Can use Snowflake Secrets for API keys
-# To use a secret: Create it in Snowflake and reference it in the app
-PAGESPEED_API_KEY = os.getenv('PAGESPEED_API_KEY', None)  # Optional, 25k requests/day without key
+# Google PageSpeed Insights API (Optional - 25k requests/day without key)
+PAGESPEED_API_KEY = os.getenv('GOOGLE_PAGESPEED_API_KEY', None)
 PAGESPEED_API_URL = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+
+# W3C HTML Validator (Public endpoint - no key needed)
 W3C_VALIDATOR_URL = "https://validator.w3.org/nu/"
 
 # ============================================================================
@@ -31,7 +28,7 @@ CATEGORY_WEIGHTS = {
 }
 
 # ============================================================================
-# Thresholds
+# Score Thresholds
 # ============================================================================
 
 EXCELLENT_THRESHOLD = 90
@@ -53,11 +50,10 @@ MAX_H1_COUNT = 1
 # ============================================================================
 
 # User Agent
-USER_AGENT = "Mozilla/5.0 (compatible; AIWebsiteGrader/1.0; +https://ai-grader.searchinfluence.com/)"
+USER_AGENT = "Mozilla/5.0 (compatible; AIWebsiteGrader/1.0)"
 
-# Timeouts - Adjusted for Snowflake environment
-# Snowflake may have stricter timeout limits
-REQUEST_TIMEOUT = 25 if IS_SNOWFLAKE else 30
+# Request timeout in seconds
+REQUEST_TIMEOUT = 30
 
 # Retry configuration for external API calls
 MAX_RETRIES = 2
@@ -67,7 +63,7 @@ RETRY_DELAY = 1  # seconds
 # UI Configuration
 # ============================================================================
 
-# Colors
+# Color scheme
 COLORS = {
     'primary': '#3d4f5d',
     'accent': '#ff8c42',
@@ -77,7 +73,7 @@ COLORS = {
     'background': '#f5f5f5'
 }
 
-# Status Labels
+# Status label ranges
 STATUS_LABELS = {
     'excellent': (90, 100),
     'good': (80, 89),
@@ -86,11 +82,10 @@ STATUS_LABELS = {
 }
 
 # ============================================================================
-# Snowflake-Specific Settings
+# Performance & Caching
 # ============================================================================
 
-# Cache configuration for Snowflake
-# Snowflake Streamlit apps benefit from caching to reduce API calls
+# Enable caching to reduce API calls and improve performance
 ENABLE_CACHING = True
 CACHE_TTL = 3600  # 1 hour in seconds
 
@@ -98,12 +93,15 @@ CACHE_TTL = 3600  # 1 hour in seconds
 RATE_LIMIT_ENABLED = True
 MAX_REQUESTS_PER_HOUR = 50
 
-# Feature flags for Snowflake deployment
+# ============================================================================
+# Feature Flags
+# ============================================================================
+
 FEATURES = {
     'pagespeed_api': True,      # Enable Google PageSpeed Insights
     'w3c_validator': True,       # Enable W3C HTML Validator
     'export_markdown': True,     # Enable Markdown export
-    'export_pdf': False,         # PDF export (may require additional setup in Snowflake)
+    'export_pdf': False,         # PDF export (future feature)
     'batch_analysis': False,     # Batch URL analysis (future feature)
 }
 
@@ -116,7 +114,7 @@ GRACEFUL_DEGRADATION = True
 
 # Error messages
 ERROR_MESSAGES = {
-    'network_error': 'Unable to connect to external service. Please check network access configuration.',
+    'network_error': 'Unable to connect to the website. Please check the URL and try again.',
     'timeout_error': 'Request timed out. The website may be slow or unavailable.',
     'invalid_url': 'Invalid URL provided. Please enter a valid website URL.',
     'rate_limit': 'Rate limit exceeded. Please wait before analyzing another URL.',
