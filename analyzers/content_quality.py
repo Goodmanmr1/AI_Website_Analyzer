@@ -167,17 +167,104 @@ class ContentQualityAnalyzer:
         return min(100, score)
     
     def _generate_findings(self, scores):
-        """Generate key findings"""
+        """Generate detailed findings with specific metrics"""
         findings = []
         
-        if scores['comprehensive_coverage'] < 50:
-            findings.append("Content lacks comprehensive coverage of the topic")
+        # Word count and comprehensiveness
+        if self.word_count < config.MIN_WORD_COUNT:
+            findings.append(f"✗ Content is too short ({self.word_count} words) - minimum {config.MIN_WORD_COUNT} words recommended")
+        elif self.word_count < config.IDEAL_WORD_COUNT:
+            findings.append(f"⚠ Content length ({self.word_count} words) below ideal ({config.IDEAL_WORD_COUNT}+ words for comprehensive coverage)")
+        else:
+            findings.append(f"✓ Good content length ({self.word_count} words) provides comprehensive coverage")
         
-        if scores['user_intent'] < 50:
-            findings.append("Content may not fully address user search intent")
+        # Content elements
+        lists = self.fetcher.soup.find_all(['ul', 'ol'])
+        tables = self.fetcher.soup.find_all('table')
+        images = self.fetcher.get_images()
+        headings = self.fetcher.get_headings()
+        total_headings = sum(len(h) for h in headings.values())
         
-        if scores['accuracy_currency'] < 50:
-            findings.append("Content lacks indicators of accuracy and currency")
+        content_elements = []
+        if lists:
+            content_elements.append(f"{len(lists)} lists")
+        if tables:
+            content_elements.append(f"{len(tables)} tables")
+        if images:
+            content_elements.append(f"{len(images)} images")
+        if total_headings >= 5:
+            content_elements.append(f"{total_headings} headings")
+        
+        if content_elements:
+            findings.append(f"✓ Rich content with {', '.join(content_elements)}")
+        else:
+            findings.append("✗ Content lacks variety - add lists, images, tables, and structured headings")
+        
+        # Long-tail keywords
+        if scores['long_tail_keywords'] >= 70:
+            findings.append("✓ Good use of long-tail keyword phrases")
+        elif scores['long_tail_keywords'] >= 40:
+            findings.append("⚠ Moderate long-tail keyword usage - could be improved")
+        else:
+            findings.append("✗ Insufficient long-tail keywords - add more specific 3-4 word phrases")
+        
+        # User intent
+        action_words = ['how to', 'guide', 'tutorial', 'steps', 'learn', 'tips']
+        info_words = ['what is', 'definition', 'meaning', 'about', 'overview']
+        has_action = any(word in self.text.lower() for word in action_words)
+        has_info = any(word in self.text.lower() for word in info_words)
+        has_examples = 'example' in self.text.lower() or 'for instance' in self.text.lower()
+        
+        intent_signals = []
+        if has_action:
+            intent_signals.append("actionable guidance")
+        if has_info:
+            intent_signals.append("informational content")
+        if has_examples:
+            intent_signals.append("examples")
+        
+        if intent_signals:
+            findings.append(f"✓ Content addresses user intent with {', '.join(intent_signals)}")
+        else:
+            findings.append("✗ Content lacks clear user intent signals (how-to, definitions, examples)")
+        
+        # Accuracy and currency
+        current_year = 2025
+        recent_years = [str(year) for year in range(current_year - 2, current_year + 1)]
+        has_recent_date = any(year in self.text for year in recent_years)
+        has_date_indicator = any(indicator in self.text.lower() for indicator in ['updated', 'published', 'last modified', 'revised'])
+        has_author = 'author' in self.text.lower() or 'written by' in self.text.lower()
+        has_citations = any(pattern in self.text.lower() for pattern in ['source:', 'according to', 'study', 'research'])
+        
+        credibility_signals = []
+        if has_recent_date:
+            credibility_signals.append("recent dates")
+        if has_date_indicator:
+            credibility_signals.append("update timestamps")
+        if has_author:
+            credibility_signals.append("author attribution")
+        if has_citations:
+            credibility_signals.append("citations/sources")
+        
+        if len(credibility_signals) >= 3:
+            findings.append(f"✓ Strong credibility signals: {', '.join(credibility_signals)}")
+        elif len(credibility_signals) >= 1:
+            findings.append(f"⚠ Some credibility signals present ({', '.join(credibility_signals)}) - add more for stronger trust")
+        else:
+            findings.append("✗ Missing credibility signals - add publication date, author info, and sources")
+        
+        # Natural language quality
+        sentences = re.split(r'[.!?]+', self.text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if sentences:
+            avg_sentence_length = sum(len(s.split()) for s in sentences) / len(sentences)
+            if 15 <= avg_sentence_length <= 20:
+                findings.append(f"✓ Excellent readability (avg {avg_sentence_length:.1f} words/sentence)")
+            elif 10 <= avg_sentence_length <= 25:
+                findings.append(f"⚠ Acceptable readability (avg {avg_sentence_length:.1f} words/sentence) - aim for 15-20")
+            else:
+                findings.append(f"✗ Readability needs improvement (avg {avg_sentence_length:.1f} words/sentence) - aim for 15-20")
         
         return findings
     
