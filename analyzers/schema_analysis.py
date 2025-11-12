@@ -1,4 +1,4 @@
-"""Schema Markup Analysis - Enhanced with Specific Findings"""
+"""Schema Markup Analysis"""
 
 import json
 
@@ -55,13 +55,40 @@ class SchemaAnalyzer:
                 for key in schema.keys():
                     if not key.startswith('@'):
                         details['properties_found'].add(key)
+            elif isinstance(schema, list):
+                # Handle arrays of schemas
+                for item in schema:
+                    if isinstance(item, dict):
+                        schema_type = item.get('@type', '')
+                        if schema_type:
+                            details['json_ld_types'].append(schema_type)
+                            schema_type_lower = schema_type.lower()
+                            if 'organization' in schema_type_lower:
+                                details['has_organization'] = True
+                            if 'article' in schema_type_lower:
+                                details['has_article'] = True
+                            if 'product' in schema_type_lower:
+                                details['has_product'] = True
+                            if 'localbusiness' in schema_type_lower:
+                                details['has_local_business'] = True
+                            if 'faqpage' in schema_type_lower:
+                                details['has_faq'] = True
+                            if 'howto' in schema_type_lower:
+                                details['has_howto'] = True
+                            if 'breadcrumb' in schema_type_lower:
+                                details['has_breadcrumb'] = True
+                            if 'review' in schema_type_lower:
+                                details['has_review'] = True
+                        
+                        # Extract properties
+                        for key in item.keys():
+                            if not key.startswith('@'):
+                                details['properties_found'].add(key)
         
         # Extract Microdata types
         for schema in self.schemas.get('microdata', []):
-            if isinstance(schema, dict):
-                schema_type = schema.get('type', '')
-                if schema_type:
-                    details['microdata_types'].append(schema_type)
+            if isinstance(schema, str):
+                details['microdata_types'].append(schema)
         
         return details
     
@@ -85,39 +112,61 @@ class SchemaAnalyzer:
         }
     
     def _analyze_schema_presence(self):
-        """Analyze schema markup presence"""
+        """Analyze schema markup presence - FIXED"""
         score = 0
         
-        if self.schemas['json_ld']:
+        # CRITICAL FIX #6: Check length properly
+        json_ld_count = len(self.schemas.get('json_ld', []))
+        microdata_count = len(self.schemas.get('microdata', []))
+        
+        if json_ld_count > 0:
             score += 60
         
-        if self.schemas['microdata']:
+        if microdata_count > 0:
             score += 40
         
         return min(100, score)
     
     def _analyze_schema_validation(self):
-        """Analyze schema validation"""
-        if not self.schemas['json_ld'] and not self.schemas['microdata']:
+        """Analyze schema validation - IMPROVED"""
+        json_ld_schemas = self.schemas.get('json_ld', [])
+        microdata_schemas = self.schemas.get('microdata', [])
+        
+        # If no schemas at all
+        if not json_ld_schemas and not microdata_schemas:
             return 0
         
-        if not self.schemas['json_ld'] and self.schemas['microdata']:
+        # If only microdata (less preferred)
+        if not json_ld_schemas and microdata_schemas:
             return 60
         
         score = 100
         
-        # Check if JSON-LD is valid JSON
-        for schema in self.schemas['json_ld']:
-            try:
-                if isinstance(schema, str):
-                    json.loads(schema)
-                # Check for @context and @type
-                if '@context' not in str(schema):
+        # Validate JSON-LD structure
+        for schema in json_ld_schemas:
+            if isinstance(schema, dict):
+                # Check for @context
+                if '@context' not in schema and '@context' not in str(schema):
+                    score -= 15
+                    
+                # Check for @type
+                if '@type' not in schema:
+                    score -= 15
+                    
+                # Check if schema has meaningful properties (not just @context and @type)
+                content_keys = [k for k in schema.keys() if not k.startswith('@')]
+                if len(content_keys) < 2:
+                    score -= 10
+                    
+            elif isinstance(schema, list):
+                # For schema arrays, check if at least one item is valid
+                valid_items = 0
+                for item in schema:
+                    if isinstance(item, dict) and '@type' in item:
+                        valid_items += 1
+                
+                if valid_items == 0:
                     score -= 20
-                if '@type' not in str(schema):
-                    score -= 20
-            except:
-                score -= 30
         
         return max(0, score)
     
@@ -145,17 +194,22 @@ class SchemaAnalyzer:
         return min(100, score)
     
     def _analyze_completeness(self):
-        """Analyze structured data completeness"""
-        has_schema = self.schemas['json_ld'] or self.schemas['microdata']
+        """Analyze structured data completeness - FIXED"""
+        json_ld_schemas = self.schemas.get('json_ld', [])
+        microdata_schemas = self.schemas.get('microdata', [])
+        
+        # CRITICAL FIX: Check actual content
+        has_schema = len(json_ld_schemas) > 0 or len(microdata_schemas) > 0
         
         if not has_schema:
             return 0
         
         score = 50
         
-        if self.schemas['json_ld'] and len(self.schemas['json_ld']) > 1:
+        # Bonus for multiple schemas
+        if len(json_ld_schemas) > 1:
             score += 25
-        elif self.schemas['microdata']:
+        elif len(microdata_schemas) > 0:
             score += 15
         
         # Check for rich properties
@@ -167,13 +221,16 @@ class SchemaAnalyzer:
         return round(min(100, score))
     
     def _analyze_json_ld(self):
-        """Analyze JSON-LD implementation"""
-        if not self.schemas['json_ld']:
-            if self.schemas['microdata']:
-                return 50
-            return 0
+        """Analyze JSON-LD implementation - FIXED"""
+        json_ld_count = len(self.schemas.get('json_ld', []))
+        microdata_count = len(self.schemas.get('microdata', []))
         
-        return 100
+        if json_ld_count == 0:
+            if microdata_count > 0:
+                return 50  # Has microdata but not JSON-LD
+            return 0  # No structured data at all
+        
+        return 100  # Has JSON-LD
     
     def _generate_findings(self, scores):
         """Generate specific, actionable findings"""
