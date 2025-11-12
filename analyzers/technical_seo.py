@@ -120,31 +120,104 @@ class TechnicalSEOAnalyzer:
         schemas = self.fetcher.get_schema_markup()
         score = 0
         
-        # JSON-LD presence
-        if schemas['json_ld']:
+        # JSON-LD presence (check length, not just truthiness)
+        if schemas.get('json_ld') and len(schemas['json_ld']) > 0:
             score += 50
         
         # Microdata presence
-        if schemas['microdata']:
+        if schemas.get('microdata') and len(schemas['microdata']) > 0:
             score += 50
         
         return score
     
     def _generate_findings(self, scores):
-        """Generate key findings"""
+        """Generate detailed findings with specific metrics"""
         findings = []
         
-        if scores['heading_structure'] < 70:
-            findings.append("Heading structure needs improvement")
+        # Heading structure with detailed breakdown
+        headings = self.fetcher.get_headings()
+        h1_count = len(headings['h1'])
+        h2_count = len(headings['h2'])
+        h3_count = len(headings['h3'])
+        total_headings = sum(len(h) for h in headings.values())
         
-        if scores['meta_info'] < 70:
-            findings.append("Meta information is incomplete or unoptimized")
+        if h1_count == 0:
+            findings.append(f"✗ Missing H1 tag - found {total_headings} total headings (H2: {h2_count}, H3: {h3_count}) but no H1")
+        elif h1_count > 1:
+            findings.append(f"✗ Multiple H1 tags ({h1_count}) detected - should have exactly one H1 per page")
+        elif h1_count == 1 and total_headings >= 5:
+            findings.append(f"✓ Excellent heading structure: 1 H1, {h2_count} H2s, {h3_count} H3s ({total_headings} total)")
+        elif h1_count == 1:
+            findings.append(f"⚠ Has H1 but limited heading structure - only {total_headings} headings total (add more H2/H3 for better organization)")
         
-        if scores['schema_markup'] < 50:
-            findings.append("Missing or incomplete schema markup")
+        # Meta information with specific details
+        title = self.fetcher.get_title()
+        meta_desc = self.fetcher.get_meta_description()
         
-        if scores['alt_text'] < 90:
-            findings.append("Some images missing alt text")
+        if not title:
+            findings.append("✗ Missing page title - critical for SEO and AI understanding")
+        elif len(title) < 30:
+            findings.append(f"✗ Title too short ({len(title)} chars) - expand to 30-60 chars for better SEO")
+        elif len(title) > 60:
+            findings.append(f"⚠ Title too long ({len(title)} chars) - may be truncated in search results (ideal: 30-60 chars)")
+        else:
+            findings.append(f"✓ Title length optimal ({len(title)} chars)")
+        
+        if not meta_desc:
+            findings.append("✗ Missing meta description - add 150-160 char summary for search snippets")
+        elif len(meta_desc) < 120:
+            findings.append(f"✗ Meta description too short ({len(meta_desc)} chars) - expand to 150-160 chars")
+        elif len(meta_desc) > 160:
+            findings.append(f"⚠ Meta description too long ({len(meta_desc)} chars) - may be truncated (ideal: 150-160 chars)")
+        else:
+            findings.append(f"✓ Meta description length optimal ({len(meta_desc)} chars)")
+        
+        # Schema markup with detailed analysis
+        schemas = self.fetcher.get_schema_markup()
+        json_ld_count = len(schemas.get('json_ld', []))
+        microdata_count = len(schemas.get('microdata', []))
+        
+        if json_ld_count == 0 and microdata_count == 0:
+            findings.append("✗ No structured data found - add JSON-LD schema for better AI and search understanding")
+        elif json_ld_count > 0 and microdata_count > 0:
+            findings.append(f"✓ Excellent: {json_ld_count} JSON-LD + {microdata_count} Microdata schemas implemented")
+        elif json_ld_count > 0:
+            findings.append(f"✓ Good: {json_ld_count} JSON-LD schema block(s) found (preferred format for AI)")
+        elif microdata_count > 0:
+            findings.append(f"⚠ Using {microdata_count} Microdata schema(s) - consider upgrading to JSON-LD for better AI compatibility")
+        
+        # Alt text with detailed breakdown
+        images = self.fetcher.get_images()
+        if images:
+            images_with_alt = sum(1 for img in images if img['has_alt'])
+            decorative = sum(1 for img in images if img.get('is_decorative', False))
+            missing_alt = len(images) - images_with_alt
+            
+            if images_with_alt == len(images):
+                findings.append(f"✓ Perfect image accessibility: all {len(images)} images have alt attributes ({decorative} decorative)")
+            elif images_with_alt / len(images) >= 0.8:
+                findings.append(f"⚠ Good image accessibility: {images_with_alt}/{len(images)} images have alt attributes ({missing_alt} missing, {decorative} decorative)")
+            else:
+                findings.append(f"✗ Poor image accessibility: only {images_with_alt}/{len(images)} images have alt attributes ({missing_alt} missing)")
+        else:
+            findings.append("✓ No images on page (no alt text issues)")
+        
+        # Link analysis
+        links = self.fetcher.get_links()
+        internal_count = len(links['internal'])
+        external_count = len(links['external'])
+        total_links = internal_count + external_count
+        
+        if total_links == 0:
+            findings.append("✗ No links found - add internal and external links for better SEO")
+        elif internal_count == 0:
+            findings.append(f"✗ No internal links - add links to other pages on your site ({external_count} external links found)")
+        elif external_count == 0:
+            findings.append(f"⚠ No external links - consider linking to authoritative sources ({internal_count} internal links found)")
+        elif internal_count > external_count * 2:
+            findings.append(f"✓ Good link balance: {internal_count} internal, {external_count} external links")
+        else:
+            findings.append(f"⚠ Link balance: {internal_count} internal, {external_count} external - consider more internal linking")
         
         return findings
     
