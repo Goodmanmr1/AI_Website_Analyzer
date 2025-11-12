@@ -2,12 +2,26 @@
 
 import os
 
+# Try to import streamlit for secrets support
+try:
+    import streamlit as st
+    HAS_STREAMLIT = True
+except ImportError:
+    HAS_STREAMLIT = False
+
 # ============================================================================
 # API Configuration
 # ============================================================================
 
 # Google PageSpeed Insights API (Optional - 25k requests/day without key)
-PAGESPEED_API_KEY = os.getenv('GOOGLE_PAGESPEED_API_KEY', None)
+# Tries Streamlit secrets first, then falls back to environment variable
+if HAS_STREAMLIT:
+    try:
+        PAGESPEED_API_KEY = st.secrets.get("GOOGLE_PAGESPEED_API_KEY", None)
+    except:
+        PAGESPEED_API_KEY = os.getenv('GOOGLE_PAGESPEED_API_KEY', None)
+else:
+    PAGESPEED_API_KEY = os.getenv('GOOGLE_PAGESPEED_API_KEY', None)
 PAGESPEED_API_URL = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 
 # W3C HTML Validator (Public endpoint - no key needed)
@@ -50,11 +64,23 @@ MAX_H1_COUNT = 1
 # ============================================================================
 
 # Improved User Agent - More browser-like but still honest
-# Includes:
-# - Browser identification (Chrome on Windows)
-# - Tool identification (AIWebsiteGrader/1.0)
-# - Contact URL (for site owners to learn more)
+# Includes browser identification + tool identification
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AIWebsiteGrader/1.0"
+
+# Additional headers to appear more browser-like
+DEFAULT_HEADERS = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'DNT': '1',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Cache-Control': 'max-age=0',
+}
 
 # Request timeout in seconds
 REQUEST_TIMEOUT = 30
@@ -62,17 +88,6 @@ REQUEST_TIMEOUT = 30
 # Retry configuration for external API calls
 MAX_RETRIES = 2
 RETRY_DELAY = 1  # seconds
-
-# Additional headers to appear more browser-like
-DEFAULT_HEADERS = {
-    'User-Agent': USER_AGENT,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'DNT': '1',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-}
 
 # ============================================================================
 # UI Configuration
@@ -97,14 +112,44 @@ STATUS_LABELS = {
 }
 
 # ============================================================================
-# Error Messages
+# Performance & Caching
 # ============================================================================
 
+# Enable caching to reduce API calls and improve performance
+ENABLE_CACHING = True
+CACHE_TTL = 3600  # 1 hour in seconds
+
+# Rate limiting to prevent excessive API usage
+RATE_LIMIT_ENABLED = True
+MAX_REQUESTS_PER_HOUR = 50
+
+# ============================================================================
+# Feature Flags
+# ============================================================================
+
+FEATURES = {
+    'pagespeed_api': True,      # Enable Google PageSpeed Insights
+    'w3c_validator': True,       # Enable W3C HTML Validator
+    'export_markdown': True,     # Enable Markdown export
+    'export_pdf': False,         # PDF export (future feature)
+    'batch_analysis': False,     # Batch URL analysis (future feature)
+}
+
+# ============================================================================
+# Error Handling
+# ============================================================================
+
+# Graceful degradation: If external APIs fail, continue with available data
+GRACEFUL_DEGRADATION = True
+
+# Error messages
 ERROR_MESSAGES = {
-    'timeout': 'The website took too long to respond. Please try again or check if the site is accessible.',
     'network_error': 'Unable to connect to the website. Please check the URL and try again.',
-    'invalid_url': 'Please enter a valid URL starting with http:// or https://',
-    'forbidden': '''⚠️ This website is blocking automated analysis tools (HTTP 403 Forbidden).
+    'timeout_error': 'Request timed out. The website may be slow or unavailable.',
+    'invalid_url': 'Invalid URL provided. Please enter a valid website URL.',
+    'rate_limit': 'Rate limit exceeded. Please wait before analyzing another URL.',
+    'api_error': 'External API error. Analysis will continue with available data.',
+    'forbidden': '''⚠️ This website is blocking automated analysis (HTTP 403 Forbidden).
 
 **Common Reasons:**
 • Web Application Firewall (Cloudflare, Akamai, AWS WAF, etc.)
@@ -115,39 +160,13 @@ ERROR_MESSAGES = {
 • Whitelist this tool's IP address in your WAF settings
 • Temporarily disable bot protection for testing
 • Contact your hosting provider or IT team
-• Try running the analysis from your local network
+• Try running from your local network
 
 **If analyzing a third-party site:**
-• This is a limitation of automated tools - the site owner has chosen to block bots
-• Consider reaching out to the site owner directly
-• Most enterprise and financial sites block automated analysis for security
-
-**Note:** This is common for SEO tools. Even established tools like Screaming Frog and Ahrefs face similar blocking.''',
-    'server_error': 'The website returned a server error. The site may be experiencing issues.',
-    'not_found': 'The page was not found (404). Please check the URL.',
+• This is a limitation of automated tools
+• The site owner has chosen to block bots for security
+• Even major SEO tools (Ahrefs, SEMrush) face similar blocking
+• Consider reaching out to the site owner directly''',
+    'not_found': 'Page not found (404). Please check the URL and try again.',
+    'server_error': 'The website returned a server error (5xx). The site may be experiencing issues.',
 }
-
-# ============================================================================
-# Feature Flags
-# ============================================================================
-
-# Enable/disable specific analyzers
-ENABLE_PERFORMANCE_API = True  # Google PageSpeed Insights
-ENABLE_HTML_VALIDATION = True  # W3C Validator
-ENABLE_SCHEMA_ANALYSIS = True
-ENABLE_MOBILE_ANALYSIS = True
-
-# Analysis depth
-DEEP_ANALYSIS = True  # More thorough but slower
-INCLUDE_RECOMMENDATIONS = True
-INCLUDE_CODE_EXAMPLES = True
-
-# ============================================================================
-# Rate Limiting
-# ============================================================================
-
-# Maximum analyses per hour (to prevent abuse)
-MAX_REQUESTS_PER_HOUR = 50
-
-# Cache TTL in seconds (1 hour)
-CACHE_TTL = 3600
