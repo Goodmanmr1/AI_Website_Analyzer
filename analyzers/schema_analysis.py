@@ -40,8 +40,13 @@ class SchemaAnalyzer:
     
     def _analyze_schema_validation(self):
         """Analyze schema validation"""
-        if not self.schemas['json_ld']:
+        # If no JSON-LD, check microdata instead
+        if not self.schemas['json_ld'] and not self.schemas['microdata']:
             return 0
+        
+        # If has microdata but no JSON-LD, give partial credit
+        if not self.schemas['json_ld'] and self.schemas['microdata']:
+            return 60  # Microdata is valid, just not JSON-LD
         
         score = 100
         
@@ -85,14 +90,19 @@ class SchemaAnalyzer:
     
     def _analyze_completeness(self):
         """Analyze structured data completeness"""
-        if not self.schemas['json_ld']:
+        # Check for any schema format
+        has_schema = self.schemas['json_ld'] or self.schemas['microdata']
+        
+        if not has_schema:
             return 0
         
         score = 50  # Base score for having schema
         
-        # Check for multiple schema types
-        if len(self.schemas['json_ld']) > 1:
+        # Check for multiple schema types (prefer JSON-LD)
+        if self.schemas['json_ld'] and len(self.schemas['json_ld']) > 1:
             score += 25
+        elif self.schemas['microdata']:
+            score += 15  # Some credit for microdata
         
         # Check for rich properties
         schema_str = str(self.schemas)
@@ -105,6 +115,9 @@ class SchemaAnalyzer:
     def _analyze_json_ld(self):
         """Analyze JSON-LD implementation"""
         if not self.schemas['json_ld']:
+            # Give partial credit for other schema formats
+            if self.schemas['microdata']:
+                return 50  # Has structured data, but not JSON-LD
             return 0
         
         return 100  # If JSON-LD exists, it's properly implemented
