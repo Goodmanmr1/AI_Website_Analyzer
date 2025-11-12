@@ -1,0 +1,255 @@
+"""AI Optimization Analysis"""
+
+import re
+from textstat import flesch_reading_ease
+
+class AIOptimizationAnalyzer:
+    def __init__(self, fetcher):
+        self.fetcher = fetcher
+        self.text = fetcher.get_text_content()
+        self.word_count = len(self.text.split())
+        
+    def analyze(self):
+        """Run all AI optimization analyses"""
+        scores = {
+            'chunkability': self._analyze_chunkability(),
+            'qa_format': self._analyze_qa_format(),
+            'entity_recognition': self._analyze_entity_recognition(),
+            'factual_density': self._analyze_factual_density(),
+            'semantic_clarity': self._analyze_semantic_clarity(),
+            'content_structure': self._analyze_content_structure(),
+            'contextual_relevance': self._analyze_contextual_relevance()
+        }
+        
+        findings = self._generate_findings(scores)
+        recommendations = self._generate_recommendations(scores)
+        
+        return {
+            'scores': scores,
+            'findings': findings,
+            'recommendations': recommendations
+        }
+    
+    def _analyze_chunkability(self):
+        """Analyze content chunkability for AI processing"""
+        if not self.text:
+            return 0
+        
+        # Split into paragraphs
+        paragraphs = [p.strip() for p in self.text.split('\n\n') if p.strip()]
+        if not paragraphs:
+            return 0
+        
+        # Ideal paragraph length: 50-150 words
+        ideal_chunks = 0
+        for para in paragraphs:
+            word_count = len(para.split())
+            if 50 <= word_count <= 150:
+                ideal_chunks += 1
+        
+        score = (ideal_chunks / len(paragraphs)) * 100
+        return round(score)
+    
+    def _analyze_qa_format(self):
+        """Analyze Q&A format optimization"""
+        if not self.text:
+            return 0
+        
+        # Count question patterns
+        question_words = ['what', 'why', 'how', 'when', 'where', 'who', 'which']
+        questions = self.text.count('?')
+        
+        # Check for question words followed by answers
+        qa_patterns = 0
+        for word in question_words:
+            pattern = rf'\b{word}\b.*\?'
+            qa_patterns += len(re.findall(pattern, self.text, re.IGNORECASE))
+        
+        # Score based on Q&A presence
+        if questions == 0:
+            return 5
+        
+        # Higher score if questions are well-distributed
+        score = min(100, (questions / (self.word_count / 100)) * 20)
+        return round(score)
+    
+    def _analyze_entity_recognition(self):
+        """Analyze entity recognition potential"""
+        if not self.text:
+            return 0
+        
+        # Simple entity detection patterns
+        # Capitalized words (potential proper nouns)
+        capitalized = len(re.findall(r'\b[A-Z][a-z]+\b', self.text))
+        
+        # Numbers and dates
+        numbers = len(re.findall(r'\b\d+\b', self.text))
+        
+        # URLs and emails
+        urls = len(re.findall(r'https?://\S+', self.text))
+        emails = len(re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', self.text))
+        
+        total_entities = capitalized + numbers + urls + emails
+        
+        # Score based on entity density per 100 words
+        entity_density = (total_entities / max(self.word_count, 1)) * 100
+        score = min(100, entity_density * 10)
+        return round(score, 1)
+    
+    def _analyze_factual_density(self):
+        """Analyze factual density (facts per content)"""
+        if not self.text:
+            return 0
+        
+        # Count factual indicators
+        numbers = len(re.findall(r'\b\d+\.?\d*%?\b', self.text))
+        dates = len(re.findall(r'\b\d{4}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b', self.text))
+        statistics = len(re.findall(r'\b\d+\.?\d*\s*(percent|%|million|billion|thousand)\b', self.text, re.IGNORECASE))
+        
+        total_facts = numbers + dates + statistics
+        
+        # Facts per 100 words
+        facts_per_100 = (total_facts / max(self.word_count, 1)) * 100
+        
+        # Score: ideal is 5-15 facts per 100 words
+        if 5 <= facts_per_100 <= 15:
+            score = 100
+        elif facts_per_100 < 5:
+            score = (facts_per_100 / 5) * 100
+        else:
+            score = max(50, 100 - (facts_per_100 - 15) * 5)
+        
+        return round(score, 2)
+    
+    def _analyze_semantic_clarity(self):
+        """Analyze semantic clarity using readability"""
+        if not self.text or self.word_count < 100:
+            return 0
+        
+        try:
+            # Flesch Reading Ease: 60-70 is ideal (8th-9th grade)
+            reading_ease = flesch_reading_ease(self.text)
+            
+            # Convert to 0-100 score (60-70 = 100, outside range = lower)
+            if 60 <= reading_ease <= 70:
+                score = 100
+            elif reading_ease < 60:
+                score = max(0, (reading_ease / 60) * 100)
+            else:
+                score = max(50, 100 - (reading_ease - 70))
+            
+            return round(score, 2)
+        except:
+            return 50
+    
+    def _analyze_content_structure(self):
+        """Analyze content structure for AI"""
+        score = 100
+        
+        # Check for lists
+        if not self.fetcher.soup.find_all(['ul', 'ol']):
+            score -= 20
+        
+        # Check for tables
+        if not self.fetcher.soup.find_all('table'):
+            score -= 20
+        
+        # Check for clear sections (headings)
+        headings = self.fetcher.get_headings()
+        total_headings = sum(len(h) for h in headings.values())
+        if total_headings < 3:
+            score -= 30
+        
+        # Check for semantic HTML
+        semantic_tags = ['article', 'section', 'aside', 'nav', 'header', 'footer']
+        has_semantic = any(self.fetcher.soup.find_all(tag) for tag in semantic_tags)
+        if not has_semantic:
+            score -= 30
+        
+        return max(0, score)
+    
+    def _analyze_contextual_relevance(self):
+        """Analyze contextual relevance"""
+        if not self.text:
+            return 0
+        
+        # Simple keyword density check
+        words = self.text.lower().split()
+        if not words:
+            return 0
+        
+        # Count unique words vs total words (lexical diversity)
+        unique_words = len(set(words))
+        lexical_diversity = (unique_words / len(words)) * 100
+        
+        # Ideal lexical diversity: 40-60%
+        if 40 <= lexical_diversity <= 60:
+            score = 100
+        elif lexical_diversity < 40:
+            score = (lexical_diversity / 40) * 100
+        else:
+            score = max(50, 100 - (lexical_diversity - 60))
+        
+        return round(score)
+    
+    def _generate_findings(self, scores):
+        """Generate key findings"""
+        findings = []
+        
+        if scores['chunkability'] < 50:
+            findings.append("Content chunks are too long or too short for optimal AI processing")
+        
+        if scores['qa_format'] < 30:
+            findings.append("Content lacks clear answer potential for AI systems")
+        
+        if scores['semantic_clarity'] < 70:
+            findings.append("Semantic structure needs improvement for AI understanding")
+        
+        if scores['factual_density'] < 50:
+            findings.append("Low factual density - add more specific data and statistics")
+        
+        return findings
+    
+    def _generate_recommendations(self, scores):
+        """Generate recommendations"""
+        recommendations = []
+        
+        if scores['semantic_clarity'] < 70:
+            recommendations.append({
+                'priority': 'HIGH',
+                'title': 'Improve semantic structure for AI processing',
+                'details': [
+                    'Use proper heading hierarchy (H1-H6)',
+                    'Implement schema markup',
+                    'Structure content with clear sections',
+                    'Use descriptive link text',
+                    'Add structured data for key information'
+                ]
+            })
+        
+        if scores['qa_format'] < 30:
+            recommendations.append({
+                'priority': 'HIGH',
+                'title': 'Optimize content for answer potential',
+                'details': [
+                    'Structure content with clear Q&A format',
+                    'Include specific, factual information',
+                    'Use bullet points and numbered lists',
+                    'Add FAQ sections with direct answers',
+                    'Include data and statistics'
+                ]
+            })
+        
+        if scores['chunkability'] < 50:
+            recommendations.append({
+                'priority': 'MEDIUM',
+                'title': 'Improve content chunkability',
+                'details': [
+                    'Break long paragraphs into 50-150 word chunks',
+                    'Use clear section breaks',
+                    'Add subheadings every 200-300 words',
+                    'Use lists for scannable content'
+                ]
+            })
+        
+        return recommendations
