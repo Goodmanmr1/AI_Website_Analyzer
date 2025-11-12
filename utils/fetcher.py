@@ -95,10 +95,16 @@ class WebsiteFetcher:
         images = []
         if self.soup:
             for img in self.soup.find_all('img'):
+                alt_text = img.get('alt')
+                # Check if alt attribute exists (even if empty)
+                has_alt_attr = 'alt' in img.attrs
+                # Empty alt="" is valid for decorative images
+                # Missing alt is the actual problem
                 images.append({
                     'src': img.get('src', ''),
-                    'alt': img.get('alt', ''),
-                    'has_alt': bool(img.get('alt'))
+                    'alt': alt_text if alt_text else '',
+                    'has_alt': has_alt_attr,  # True even if alt=""
+                    'is_decorative': has_alt_attr and not alt_text  # Empty alt
                 })
         return images
     
