@@ -1,9 +1,10 @@
-"""Utilities for fetching and parsing website content - Snowflake Edition"""
+"""Utilities for fetching and parsing website content"""
 
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import time
+import re
 import config
 
 class WebsiteFetcher:
@@ -87,71 +88,149 @@ class WebsiteFetcher:
         return headings
     
     def get_text_content(self):
-        """Extract main text content"""
-        if self.soup:
-            # Remove script and style elements
-            for script in self.soup(["script", "style", "nav", "footer", "header"]):
-                script.decompose()
-            
-            text = self.soup.get_text()
-            # Clean up whitespace
-            lines = (line.strip() for line in text.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = ' '.join(chunk for chunk in chunks if chunk)
-            return text
-        return ""
+        """Extract main text content with improved prioritization - FIXED"""
+        if not self.soup:
+            return ""
+        
+        # Create a copy to avoid modifying original
+        soup_copy = BeautifulSoup(str(self.soup), 'lxml')
+        
+        # CRITICAL FIX #1: Prioritize main content areas
+        # Try to find the main content container in order of priority
+        main_content = None
+        
+        # 1. Look for <main> tag (HTML5 semantic)
+        main_content = soup_copy.find('main')
+        
+        # 2. Look for <article> tag
+        if not main_content:
+            main_content = soup_copy.find('article')
+        
+        # 3. Look for role="main"
+        if not main_content:
+            main_content = soup_copy.find(attrs={'role': 'main'})
+        
+        # 4. Look for common content class/id patterns
+        if not main_content:
+            content_patterns = ['content', 'main-content', 'post-content', 'article-content', 'page-content']
+            for pattern in content_patterns:
+                main_content = soup_copy.find(['div', 'section'], class_=re.compile(pattern, re.I))
+                if main_content:
+                    break
+        
+        # 5. Look for common content ID patterns
+        if not main_content:
+            for pattern in content_patterns:
+                main_content = soup_copy.find(['div', 'section'], id=re.compile(pattern, re.I))
+                if main_content:
+                    break
+        
+        # If we found a main content area, use it. Otherwise, use the whole body
+        content_area = main_content if main_content else soup_copy.find('body')
+        
+        if not content_area:
+            content_area = soup_copy
+        
+        # Remove non-content elements from the content area
+        for element in content_area(["script", "style", "nav", "footer", "header", "aside", "form", "iframe"]):
+            element.decompose()
+        
+        # Also remove elements with common non-content classes
+        non_content_patterns = ['sidebar', 'menu', 'navigation', 'nav', 'breadcrumb', 'advertisement', 'ad', 'social', 'share', 'related', 'comment']
+        for pattern in non_content_patterns:
+            for element in content_area.find_all(class_=re.compile(pattern, re.I)):
+                element.decompose()
+        
+        text = content_area.get_text()
+        
+        # Clean up whitespace
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text = ' '.join(chunk for chunk in chunks if chunk)
+        
+        return text
     
     def get_images(self):
-        """Extract all images with alt text info"""
+        """Extract all images with FIXED alt text detection"""
         images = []
         if self.soup:
             for img in self.soup.find_all('img'):
-                alt_text = img.get('alt')
-                # Check if alt attribute exists (even if empty)
+                alt_text = img.get('alt', '').strip()
                 has_alt_attr = 'alt' in img.attrs
-                # Empty alt="" is valid for decorative images
-                # Missing alt is the actual problem
+                
+                # CRITICAL FIX #2: Properly detect meaningful alt text
+                # Empty alt="" is valid for decorative images, but shouldn't count as "has alt"
+                # for accessibility scoring purposes
+                has_meaningful_alt = has_alt_attr and len(alt_text) > 0
+                is_decorative = has_alt_attr and len(alt_text) == 0
+                
                 images.append({
                     'src': img.get('src', ''),
-                    'alt': alt_text if alt_text else '',
-                    'has_alt': has_alt_attr,  # True even if alt=""
-                    'is_decorative': has_alt_attr and not alt_text  # Empty alt
+                    'alt': alt_text,
+                    'has_alt': has_meaningful_alt,  # FIXED: Only True if alt has actual content
+                    'is_decorative': is_decorative,  # Track decorative images separately
+                    'missing_alt': not has_alt_attr  # Track completely missing alt attribute
                 })
         return images
     
     def get_links(self):
-        """Extract all links (internal and external)"""
-        links = {'internal': [], 'external': []}
+        """Extract all links (internal and external) - IMPROVED"""
+        links = {'internal': [], 'external': [], 'invalid': []}
         if self.soup:
             base_domain = urlparse(self.url).netloc
             for link in self.soup.find_all('a', href=True):
-                href = link['href']
-                absolute_url = urljoin(self.url, href)
-                link_domain = urlparse(absolute_url).netloc
+                href = link['href'].strip()
                 
-                if link_domain == base_domain or not link_domain:
-                    links['internal'].append(absolute_url)
-                else:
-                    links['external'].append(absolute_url)
+                # Skip empty hrefs, anchors, and javascript
+                if not href or href.startswith('#') or href.startswith('javascript:') or href.startswith('mailto:') or href.startswith('tel:'):
+                    continue
+                
+                try:
+                    absolute_url = urljoin(self.url, href)
+                    link_domain = urlparse(absolute_url).netloc
+                    
+                    if link_domain == base_domain or not link_domain:
+                        links['internal'].append(absolute_url)
+                    else:
+                        links['external'].append(absolute_url)
+                except:
+                    links['invalid'].append(href)
+        
         return links
     
     def get_schema_markup(self):
-        """Extract JSON-LD and Microdata schema"""
+        """Extract JSON-LD and Microdata schema - FIXED validation"""
         schemas = {'json_ld': [], 'microdata': []}
         
         if self.soup:
-            # JSON-LD
+            # JSON-LD - CRITICAL FIX #3: Validate the schema is parseable
             for script in self.soup.find_all('script', type='application/ld+json'):
                 try:
                     import json
-                    schema_data = json.loads(script.string)
-                    schemas['json_ld'].append(schema_data)
-                except:
-                    pass
+                    if script.string:
+                        schema_data = json.loads(script.string)
+                        # Only add if it's valid and has content
+                        if schema_data and isinstance(schema_data, (dict, list)):
+                            # Ensure it has @type or is a list of objects with @type
+                            if isinstance(schema_data, dict):
+                                if '@type' in schema_data or '@context' in schema_data:
+                                    schemas['json_ld'].append(schema_data)
+                            elif isinstance(schema_data, list) and len(schema_data) > 0:
+                                # For arrays, check if at least one item has @type
+                                if any('@type' in item for item in schema_data if isinstance(item, dict)):
+                                    schemas['json_ld'].append(schema_data)
+                except json.JSONDecodeError:
+                    # Skip invalid JSON
+                    continue
+                except Exception:
+                    # Skip any other errors
+                    continue
             
-            # Microdata
+            # Microdata - FIXED: Only count valid microdata
             for item in self.soup.find_all(attrs={'itemtype': True}):
-                schemas['microdata'].append(item.get('itemtype'))
+                itemtype = item.get('itemtype')
+                if itemtype:  # Only add if itemtype has a value
+                    schemas['microdata'].append(itemtype)
         
         return schemas
     
@@ -167,10 +246,14 @@ class WebsiteFetcher:
         return meta_tags
     
     def check_viewport(self):
-        """Check for viewport meta tag"""
+        """Check for viewport meta tag - IMPROVED with validation"""
         if self.soup:
             viewport = self.soup.find('meta', attrs={'name': 'viewport'})
-            return viewport is not None
+            if viewport:
+                content = viewport.get('content', '')
+                # Check if it has the expected viewport properties
+                if 'width=' in content.lower() or 'initial-scale' in content.lower():
+                    return True
         return False
     
     def check_robots_meta(self):
@@ -184,7 +267,10 @@ class WebsiteFetcher:
     def get_word_count(self):
         """Get word count of main content"""
         text = self.get_text_content()
-        return len(text.split())
+        words = text.split()
+        # Filter out very short "words" that are likely artifacts
+        meaningful_words = [w for w in words if len(w) > 1]
+        return len(meaningful_words)
     
     def fetch_robots_txt(self):
         """Fetch and parse robots.txt"""
