@@ -3,10 +3,11 @@
 import config
 
 def calculate_category_score(sub_scores):
-    """Calculate average score from sub-scores"""
+    """Calculate average score from sub-scores - rounded to 1 decimal"""
     if not sub_scores:
         return 0
-    return sum(sub_scores.values()) / len(sub_scores)
+    avg = sum(sub_scores.values()) / len(sub_scores)
+    return round(avg, 1)  # FIXED: Round to 1 decimal place
 
 def calculate_overall_score(category_scores):
     """Calculate weighted overall score"""
@@ -14,7 +15,7 @@ def calculate_overall_score(category_scores):
     for category, score in category_scores.items():
         weight = config.CATEGORY_WEIGHTS.get(category, 0)
         total_score += score * weight
-    return round(total_score)
+    return round(total_score)  # Already rounds to integer
 
 def get_status_label(score):
     """Get status label based on score"""
