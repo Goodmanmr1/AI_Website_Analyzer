@@ -24,13 +24,23 @@ else:
     PAGESPEED_API_KEY = os.getenv('GOOGLE_PAGESPEED_API_KEY', None)
 PAGESPEED_API_URL = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 
+# Firecrawl API Configuration (Enhanced scraping for JS-heavy sites)
+# Tries Streamlit secrets first, then falls back to environment variable
+if HAS_STREAMLIT:
+    try:
+        FIRECRAWL_API_KEY = st.secrets.get("FIRECRAWL_API_KEY", None)
+    except:
+        FIRECRAWL_API_KEY = os.getenv('FIRECRAWL_API_KEY', None)
+else:
+    FIRECRAWL_API_KEY = os.getenv('FIRECRAWL_API_KEY', None)
+
+# Firecrawl settings
+USE_FIRECRAWL_DEFAULT = False  # Default to regular fetcher unless specified
+FIRECRAWL_WAIT_TIME = 3000  # Milliseconds to wait for JS rendering
+FIRECRAWL_TIMEOUT = 60  # Seconds timeout for Firecrawl operations
+
 # W3C HTML Validator (Public endpoint - no key needed)
 W3C_VALIDATOR_URL = "https://validator.w3.org/nu/"
-
-# Add Firecrawl configuration
-FIRECRAWL_API_KEY = os.getenv('FIRECRAWL_API_KEY', None)
-USE_FIRECRAWL_DEFAULT = False
-MAX_CRAWL_PAGES = 50
 
 # ============================================================================
 # Scoring Weights (must sum to 1.0)
@@ -138,6 +148,7 @@ FEATURES = {
     'export_markdown': True,     # Enable Markdown export
     'export_pdf': False,         # PDF export (future feature)
     'batch_analysis': False,     # Batch URL analysis (future feature)
+    'firecrawl': True,          # Enable Firecrawl for JS-heavy sites
 }
 
 # ============================================================================
@@ -154,6 +165,8 @@ ERROR_MESSAGES = {
     'invalid_url': 'Invalid URL provided. Please enter a valid website URL.',
     'rate_limit': 'Rate limit exceeded. Please wait before analyzing another URL.',
     'api_error': 'External API error. Analysis will continue with available data.',
+    'firecrawl_api_missing': 'Firecrawl API key not configured. Please add FIRECRAWL_API_KEY to use enhanced scraping.',
+    'firecrawl_error': 'Firecrawl enhanced scraping failed. Falling back to standard scraper.',
     'forbidden': '''⚠️ This website is blocking automated analysis (HTTP 403 Forbidden).
 
 **Common Reasons:**
