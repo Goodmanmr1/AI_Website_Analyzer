@@ -50,27 +50,49 @@ class AIOptimizationAnalyzer:
         return round(score)
     
     def _analyze_qa_format(self):
-        """Analyze Q&A format optimization"""
+        """Analyze Q&A format optimization - IMPROVED for content type awareness"""
         if not self.text:
             return 0
         
-        # Count question patterns
-        question_words = ['what', 'why', 'how', 'when', 'where', 'who', 'which']
         questions = self.text.count('?')
         
-        # Check for question words followed by answers
-        qa_patterns = 0
-        for word in question_words:
-            pattern = rf'\b{word}\b.*\?'
-            qa_patterns += len(re.findall(pattern, self.text, re.IGNORECASE))
+        # IMPROVED: Recognize different content types
+        headings = self.fetcher.get_headings()
+        h2_count = len(headings.get('h2', []))
+        has_sections = h2_count >= 5
+        is_long_form = self.word_count > 1500
         
-        # Score based on Q&A presence
-        if questions == 0:
-            return 5
+        # Encyclopedic/informational content (like Wikipedia)
+        # These are valuable for AI without explicit Q&A format
+        if is_long_form and has_sections:
+            # For encyclopedic content, Q&A is a bonus, not required
+            if questions == 0:
+                return 70  # Still excellent for AI (factual, structured)
+            elif questions < 5:
+                return 80  # Some questions enhance it
+            elif questions < 20:
+                return 90  # Good mix of questions
+            else:
+                return 95  # Excellent Q&A integration
         
-        # Higher score if questions are well-distributed
-        score = min(100, (questions / (self.word_count / 100)) * 20)
-        return round(score)
+        # Short-form or unstructured content needs Q&A more
+        else:
+            if questions == 0:
+                return 5  # Missing opportunity for engagement
+            
+            # Calculate questions per 100 words
+            questions_per_100 = (questions / max(self.word_count, 1)) * 100
+            
+            # Scoring: 2-5 questions per 100 words is ideal for short content
+            if 2 <= questions_per_100 <= 5:
+                score = 100
+            elif questions_per_100 < 2:
+                score = min(90, questions_per_100 * 50)
+            else:
+                # Too many questions can be overwhelming
+                score = max(60, 100 - (questions_per_100 - 5) * 10)
+            
+            return round(score)
     
     def _analyze_entity_recognition(self):
         """Analyze entity recognition potential"""
@@ -256,10 +278,17 @@ class AIOptimizationAnalyzer:
             else:
                 findings.append(f"Good: {ideal_count} of {len(paragraphs)} paragraphs ({scores['chunkability']}%) are optimally sized for AI")
         
-        # Q&A format
+        # Q&A format - context-aware findings
         question_count = self.text.count('?')
+        headings = self.fetcher.get_headings()
+        h2_count = len(headings.get('h2', []))
+        is_long_form = self.word_count > 1500
+        
         if scores['qa_format'] < 30:
             findings.append(f"Limited Q&A format: Found only {question_count} questions in {self.word_count} words")
+        elif scores['qa_format'] >= 70 and is_long_form and h2_count >= 5:
+            # Recognize well-structured encyclopedic content
+            findings.append(f"Good: Well-structured informational content with {question_count} questions across {self.word_count} words - excellent for AI knowledge extraction")
         
         # Semantic clarity
         if scores['semantic_clarity'] < 70:
