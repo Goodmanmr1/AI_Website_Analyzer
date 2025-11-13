@@ -1,5 +1,4 @@
 """Schema Markup Analysis"""
-
 import json
 
 class SchemaAnalyzer:
