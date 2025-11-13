@@ -266,17 +266,25 @@ class AIOptimizationAnalyzer:
         return round(score)
     
     def _generate_findings(self, scores):
-        """Generate key findings with specific details"""
+        """Generate key findings with specific details - ENHANCED"""
         findings = []
         
-        # Chunkability with details
+        # Chunkability with detailed context
         paragraphs = self.fetcher.soup.find_all('p')
         if paragraphs:
             ideal_count = sum(1 for p in paragraphs if 50 <= len(p.get_text(strip=True).split()) <= 150)
+            too_short = sum(1 for p in paragraphs if len(p.get_text(strip=True).split()) < 50)
+            too_long = sum(1 for p in paragraphs if len(p.get_text(strip=True).split()) > 150)
+            
             if scores['chunkability'] < 50:
-                findings.append(f"Only {ideal_count} of {len(paragraphs)} paragraphs ({scores['chunkability']}%) are in the ideal 50-150 word range for AI processing")
+                findings.append(f"✗ Poor paragraph structure: {ideal_count}/{len(paragraphs)} paragraphs optimal (50-150 words). {too_short} too short, {too_long} too long")
+                findings.append(f"💡 AI systems process content in chunks - paragraphs should be 50-150 words for optimal understanding")
+            elif scores['chunkability'] < 70:
+                findings.append(f"⚠ Paragraph structure needs work: {ideal_count}/{len(paragraphs)} optimal ({scores['chunkability']}%). {too_short} too short, {too_long} too long")
             else:
-                findings.append(f"Good: {ideal_count} of {len(paragraphs)} paragraphs ({scores['chunkability']}%) are optimally sized for AI")
+                findings.append(f"✓ Excellent: {ideal_count}/{len(paragraphs)} paragraphs ({scores['chunkability']}%) are optimally sized for AI processing")
+        else:
+            findings.append("✗ No paragraph tags found - content structure is unclear to AI systems")
         
         # Q&A format - context-aware findings
         question_count = self.text.count('?')
@@ -285,20 +293,80 @@ class AIOptimizationAnalyzer:
         is_long_form = self.word_count > 1500
         
         if scores['qa_format'] < 30:
-            findings.append(f"Limited Q&A format: Found only {question_count} questions in {self.word_count} words")
+            findings.append(f"✗ Limited Q&A format: Found only {question_count} questions in {self.word_count} words")
+            findings.append(f"💡 Add Q&A sections - AI systems favor content that directly answers questions")
         elif scores['qa_format'] >= 70 and is_long_form and h2_count >= 5:
-            # Recognize well-structured encyclopedic content
-            findings.append(f"Good: Well-structured informational content with {question_count} questions across {self.word_count} words - excellent for AI knowledge extraction")
+            findings.append(f"✓ Excellent: Well-structured informational content with {question_count} questions across {self.word_count} words - ideal for AI knowledge extraction")
+        elif scores['qa_format'] >= 60:
+            findings.append(f"✓ Good Q&A integration: {question_count} questions in {self.word_count} words helps AI provide direct answers")
+        
+        # Entity Recognition
+        if scores['entity_recognition'] >= 80:
+            findings.append(f"✓ Excellent entity density ({scores['entity_recognition']}%) - rich in names, dates, and specific information AI can extract")
+        elif scores['entity_recognition'] >= 60:
+            findings.append(f"⚠ Moderate entity density ({scores['entity_recognition']}%) - add more specific names, dates, and data points")
+        else:
+            findings.append(f"✗ Low entity density ({scores['entity_recognition']}%) - content is too generic, add specific names, dates, statistics")
         
         # Semantic clarity
-        if scores['semantic_clarity'] < 70:
-            findings.append(f"Readability score: {scores['semantic_clarity']}% - content may be too complex or too simple for AI processing")
+        if scores['semantic_clarity'] == 0:
+            findings.append(f"✗ CRITICAL: Readability analysis failed - content may be too short ({self.word_count} words) or lacks proper sentence structure")
+        elif scores['semantic_clarity'] < 60:
+            findings.append(f"✗ Readability score: {scores['semantic_clarity']}% - content is likely too complex for broad AI understanding")
+            findings.append(f"💡 Aim for 8th-9th grade reading level (Flesch score 60-70) for optimal AI processing")
+        elif scores['semantic_clarity'] < 70:
+            findings.append(f"⚠ Readability score: {scores['semantic_clarity']}% - slightly below ideal (aim for 60-70% for best AI comprehension)")
+        else:
+            findings.append(f"✓ Excellent readability ({scores['semantic_clarity']}%) - content is clear and accessible for AI processing")
         
-        # Factual density
-        if scores['factual_density'] < 50:
-            findings.append(f"Low factual density ({scores['factual_density']}%) - add more specific data, statistics, and dates")
+        # Factual density with context
+        if scores['factual_density'] < 30:
+            findings.append(f"✗ Very low factual density ({scores['factual_density']}%) - add specific data, statistics, dates, and quantifiable information")
+            findings.append(f"💡 AI systems prioritize factual, data-driven content - include numbers, percentages, dates")
+        elif scores['factual_density'] < 50:
+            findings.append(f"⚠ Low factual density ({scores['factual_density']}%) - increase specific data, statistics, and dates for better AI citation")
         elif scores['factual_density'] > 90:
-            findings.append(f"Excellent factual density ({scores['factual_density']}%) - rich in data and statistics")
+            findings.append(f"✓ Excellent factual density ({scores['factual_density']}%) - rich in data and statistics that AI can cite")
+        else:
+            findings.append(f"✓ Good factual density ({scores['factual_density']}%) - balanced mix of narrative and data")
+        
+        # Content Structure
+        lists = len(self.fetcher.soup.find_all(['ul', 'ol']))
+        tables = len(self.fetcher.soup.find_all('table'))
+        headings_all = self.fetcher.get_headings()
+        total_headings = sum(len(h) for h in headings_all.values())
+        
+        structure_elements = []
+        if lists > 0:
+            structure_elements.append(f"{lists} lists")
+        if tables > 0:
+            structure_elements.append(f"{tables} tables")
+        if total_headings >= 5:
+            structure_elements.append(f"{total_headings} headings")
+        
+        if scores['content_structure'] >= 80:
+            findings.append(f"✓ Strong content structure: {', '.join(structure_elements)} - well-organized for AI parsing")
+        elif scores['content_structure'] >= 60:
+            findings.append(f"⚠ Moderate structure: {', '.join(structure_elements) if structure_elements else 'minimal formatting'} - add more organizational elements")
+        else:
+            findings.append(f"✗ Poor structure: lacking lists, tables, and semantic HTML - AI struggles to parse unstructured content")
+        
+        # Contextual Relevance
+        if scores['contextual_relevance'] >= 80:
+            findings.append(f"✓ Excellent lexical diversity ({scores['contextual_relevance']}%) - varied vocabulary without excessive repetition")
+        elif scores['contextual_relevance'] >= 60:
+            findings.append(f"⚠ Moderate lexical diversity ({scores['contextual_relevance']}%) - some word repetition detected")
+        else:
+            findings.append(f"✗ Poor lexical diversity ({scores['contextual_relevance']}%) - too much repetition or too generic")
+        
+        # Overall AI Readiness Assessment
+        avg_score = sum(scores.values()) / len(scores)
+        if avg_score < 40:
+            findings.append("⚠ CRITICAL: Overall AI optimization is very low - content may be largely invisible to AI systems")
+        elif avg_score < 60:
+            findings.append("⚠ AI optimization needs significant improvement - content is not structured for AI consumption")
+        elif avg_score >= 80:
+            findings.append("✓ Strong AI readiness - content is well-optimized for AI search and chatbot responses")
         
         return findings
     
