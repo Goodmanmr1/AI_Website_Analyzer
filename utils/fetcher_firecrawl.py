@@ -1,4 +1,4 @@
-"""Firecrawl-based fetcher for enhanced content extraction"""
+"""Firecrawl-based fetcher for enhanced content extraction - V2 API"""
 
 from firecrawl import Firecrawl
 import os
@@ -408,27 +408,6 @@ class FirecrawlFetcher:
             pass
         
         return None
-            
-            if self.scraped_data:
-                # Set status code (Firecrawl usually returns 200 for successful scrapes)
-                self.status_code = self.scraped_data.get('statusCode', 200)
-                
-                # Store markdown and HTML
-                self.markdown_content = self.scraped_data.get('markdown', '')
-                self.html_content = self.scraped_data.get('html', '')
-                
-                # Create BeautifulSoup object for compatibility with existing analyzers
-                if self.html_content:
-                    self.soup = BeautifulSoup(self.html_content, 'lxml')
-                
-                return True
-            else:
-                raise Exception("No data returned from Firecrawl")
-                
-        except Exception as e:
-            # Fallback status code
-            self.status_code = 500
-            raise Exception(f"Firecrawl fetch failed: {str(e)}")
     
     def get_title(self):
         """Extract page title"""
