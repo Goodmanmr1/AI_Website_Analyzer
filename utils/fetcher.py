@@ -148,6 +148,22 @@ class WebsiteFetcher:
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         text = ' '.join(chunk for chunk in chunks if chunk)
         
+        # FALLBACK: If we got almost nothing, try getting ALL body text
+        # This helps with JavaScript-heavy sites
+        word_count = len(text.split())
+        if word_count < 50:
+            # Try less aggressive filtering
+            body = soup_copy.find('body')
+            if body:
+                # Only remove scripts and styles
+                for element in body(["script", "style"]):
+                    element.decompose()
+                
+                text = body.get_text()
+                lines = (line.strip() for line in text.splitlines())
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                text = ' '.join(chunk for chunk in chunks if chunk)
+        
         return text
     
     def get_images(self):
