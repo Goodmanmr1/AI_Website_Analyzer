@@ -1,8 +1,17 @@
-# 🚀 AI Website Grader
+# 🚀 AI Website Grader with Firecrawl Integration
 
-A comprehensive web application that evaluates websites for AI-powered search engine optimization, mobile experience, and technical SEO performance.
+A comprehensive web application that evaluates websites for AI-powered search engine optimization, mobile experience, and technical SEO performance. Now with **Firecrawl integration** for enhanced JavaScript site analysis!
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.streamlit.app)
+
+## 🔥 New: Firecrawl Integration
+
+This version includes optional **Firecrawl** integration for superior content extraction from:
+- JavaScript-heavy websites
+- Single Page Applications (SPAs)
+- React, Vue, Angular sites
+- Dynamic content that loads after page load
+- Sites that standard scrapers struggle with
 
 ## 📋 Overview
 
@@ -15,6 +24,7 @@ AI Website Grader analyzes websites across seven weighted categories to assess h
 - **🔍 Search Visibility** - Reviews technical SEO and crawlability
 - **📊 Structured Data** - Checks schema markup implementation
 - **✅ Performance Metrics** - Integrates with Google PageSpeed Insights
+- **🔥 Firecrawl Mode** - Enhanced extraction for JavaScript sites
 - **📄 Downloadable Reports** - Export results in Markdown format
 
 ## 🎯 Analysis Categories
@@ -31,23 +41,13 @@ AI Website Grader analyzes websites across seven weighted categories to assess h
 
 ## 🚀 Quick Start
 
-### Deploy to Streamlit Cloud
+### Prerequisites
 
-1. **Fork this repository** to your GitHub account
+- Python 3.9+
+- Streamlit account (for cloud deployment)
+- Optional: Firecrawl API key for enhanced scraping
 
-2. **Go to [Streamlit Cloud](https://streamlit.io/cloud)**
-
-3. **Click "New app"**
-
-4. **Select your forked repository**
-   - Main file path: `app.py`
-   - Python version: 3.9+
-
-5. **Click "Deploy"**
-
-That's it! Your app will be live in a few minutes.
-
-### Run Locally
+### Installation
 
 ```bash
 # Clone the repository
@@ -61,24 +61,60 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Set up environment variables (optional)
+export FIRECRAWL_API_KEY="your-firecrawl-api-key"  # Get from firecrawl.dev
+export GOOGLE_PAGESPEED_API_KEY="your-pagespeed-key"  # Optional
+
 # Run the app
 streamlit run app.py
 ```
 
-The app will open in your browser at `http://localhost:8501`
+## 🔥 Firecrawl Setup
+
+### Getting a Firecrawl API Key
+
+1. Visit [firecrawl.dev](https://firecrawl.dev)
+2. Sign up for a free account (500 credits/month)
+3. Copy your API key from the dashboard
+
+### Configuration Options
+
+#### Option 1: Environment Variable
+```bash
+export FIRECRAWL_API_KEY="fc-your-api-key"
+```
+
+#### Option 2: Streamlit Secrets (for cloud deployment)
+Add to `.streamlit/secrets.toml`:
+```toml
+FIRECRAWL_API_KEY = "fc-your-api-key"
+```
+
+#### Option 3: User-Provided Key
+Users can enter their own API key directly in the app's Advanced Options
+
+### When to Use Firecrawl
+
+Enable Firecrawl mode when analyzing:
+- React, Vue, Angular applications
+- Sites showing < 200 words in standard mode
+- E-commerce sites with dynamic content
+- Modern web apps with client-side rendering
+- Sites behind Cloudflare (better success rate)
 
 ## 📁 Project Structure
 
 ```
 ai-website-grader/
-├── app.py                      # Main Streamlit application
-├── config.py                   # Configuration settings
-├── requirements.txt            # Python dependencies
+├── app.py                      # Main Streamlit application with Firecrawl toggle
+├── config.py                   # Configuration with Firecrawl settings
+├── requirements.txt            # Dependencies including firecrawl-py
 ├── .streamlit/
 │   └── config.toml            # Streamlit configuration
 ├── utils/
 │   ├── __init__.py
-│   ├── fetcher.py             # Website fetching utilities
+│   ├── fetcher.py             # Standard website fetcher
+│   ├── fetcher_firecrawl.py  # Firecrawl-enhanced fetcher
 │   ├── scoring.py             # Score calculation logic
 │   └── export.py              # Report generation
 ├── analyzers/
@@ -90,51 +126,54 @@ ai-website-grader/
 │   ├── performance.py         # Performance metrics
 │   ├── schema_analysis.py     # Structured data checker
 │   └── technical_seo.py       # Technical SEO analyzer
-├── README.md                   # This file
-└── LICENSE                     # MIT License
+└── README.md                   # This file
 ```
 
 ## 🔧 Configuration
 
-### API Keys (Optional)
+### API Keys
 
-The app works without API keys, but you can enhance it with:
+The app works without API keys but is enhanced with:
 
-- **Google PageSpeed Insights API**: Add to Streamlit secrets for performance analysis
+- **Firecrawl API**: JavaScript rendering and enhanced extraction
+- **Google PageSpeed Insights API**: Performance metrics
 - **W3C HTML Validator**: Uses public endpoint (no key needed)
 
-To add API keys in Streamlit Cloud:
-1. Go to your app settings
-2. Click "Secrets"
-3. Add:
-```toml
-GOOGLE_PAGESPEED_API_KEY = "your-api-key-here"
-```
+### Firecrawl vs Standard Mode
 
-### Customization
+| Feature | Standard Mode | Firecrawl Mode |
+|---------|--------------|----------------|
+| JavaScript Rendering | ❌ | ✅ |
+| SPA Support | Limited | Full |
+| Content Extraction | HTML only | HTML + Markdown |
+| Dynamic Content | ❌ | ✅ |
+| Clean Markdown | ❌ | ✅ |
+| LLM Insights | ❌ | ✅ |
+| API Key Required | No | Yes |
+| Cost | Free | Free tier available |
 
-Edit `config.py` to customize:
-- Category weights
-- Scoring thresholds
-- Timeout values
-- User agent string
+## 🎨 Usage Examples
 
-## 📊 How It Works
+### Basic Analysis (Standard Mode)
+1. Enter website URL
+2. Click "START ANALYSIS"
+3. View results and download report
 
-1. **Fetch**: Retrieves HTML content from the provided URL
-2. **Parse**: Extracts metadata, content, and structural elements
-3. **Analyze**: Runs 35+ individual checks across 7 categories
-4. **Score**: Calculates weighted scores based on findings
-5. **Report**: Generates detailed recommendations
+### Enhanced Analysis (Firecrawl Mode)
+1. Enter website URL
+2. Expand "Advanced Options"
+3. Check "Use Firecrawl"
+4. Click "START ANALYSIS"
+5. Get enhanced insights including:
+   - Better content extraction
+   - Questions the content answers
+   - Key facts and statistics
+   - Expertise indicators
 
-## 🛠️ Technology Stack
+### Batch Analysis (Coming Soon)
+Future feature for analyzing multiple URLs
 
-- **Framework**: Streamlit
-- **Web Scraping**: BeautifulSoup4, Requests
-- **Content Analysis**: textstat
-- **APIs**: Google PageSpeed Insights, W3C Validator
-
-## 📈 Scoring System
+## 📊 Scoring System
 
 Scores are calculated on a 0-100 scale:
 
@@ -145,35 +184,72 @@ Scores are calculated on a 0-100 scale:
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Areas for improvement:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+- [ ] Add more LLM extraction schemas
+- [ ] Implement batch URL processing
+- [ ] Add competitor comparison features
+- [ ] Create API endpoint version
+- [ ] Add more export formats (PDF, JSON)
+
+## 📈 Deployment
+
+### Deploy to Streamlit Cloud
+
+1. Fork this repository
+2. Add secrets in Streamlit Cloud dashboard:
+   ```toml
+   FIRECRAWL_API_KEY = "your-key"
+   GOOGLE_PAGESPEED_API_KEY = "your-key"  # optional
+   ```
+3. Deploy from GitHub repository
+
+### Deploy with Docker
+
+```dockerfile
+FROM python:3.9-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+ENV FIRECRAWL_API_KEY="your-key"
+EXPOSE 8501
+CMD ["streamlit", "run", "app.py"]
+```
+
+## 🔒 Security
+
+- API keys are never logged or exposed
+- Firecrawl requests are server-side only
+- User-provided keys are session-specific
+- No data is permanently stored
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - See [LICENSE](LICENSE) file for details
 
 ## 🙏 Acknowledgments
 
 - Built with [Streamlit](https://streamlit.io/)
-- Inspired by the evolving landscape of AI-powered search
-- Uses free and open-source libraries
+- Enhanced with [Firecrawl](https://firecrawl.dev/)
+- Uses [BeautifulSoup4](https://www.crummy.com/software/BeautifulSoup/) for HTML parsing
+- Integrates [Google PageSpeed Insights](https://developers.google.com/speed/pagespeed/insights/)
 
 ## 📧 Support
 
-For questions or issues:
 - Open an [Issue](https://github.com/yourusername/ai-website-grader/issues)
-- Check the [Discussions](https://github.com/yourusername/ai-website-grader/discussions)
+- Check [Discussions](https://github.com/yourusername/ai-website-grader/discussions)
+- Firecrawl docs: [docs.firecrawl.dev](https://docs.firecrawl.dev)
 
-## 🔗 Links
+## 🚀 Roadmap
 
-- [Live Demo](https://your-app-url.streamlit.app)
-- [Documentation](https://github.com/yourusername/ai-website-grader/wiki)
-- [Changelog](https://github.com/yourusername/ai-website-grader/releases)
+- [x] Firecrawl integration for JS sites
+- [ ] Full site crawling mode
+- [ ] Competitor analysis features
+- [ ] Historical tracking
+- [ ] API endpoint version
+- [ ] Chrome extension
+- [ ] WordPress plugin
 
 ---
 
