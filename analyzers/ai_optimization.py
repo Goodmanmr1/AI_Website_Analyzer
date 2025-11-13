@@ -31,23 +31,47 @@ class AIOptimizationAnalyzer:
         }
     
     def _analyze_chunkability(self):
-        """Analyze content chunkability for AI processing"""
-        # Use HTML paragraph tags instead of text splitting
+        """Analyze content chunkability for AI processing - IMPROVED"""
         paragraphs = self.fetcher.soup.find_all('p')
         
         if not paragraphs:
             return 0
         
-        # Ideal paragraph length: 50-150 words
-        ideal_chunks = 0
+        # Categorize paragraphs by semantic purpose
+        tiny = 0       # 1-20 words (captions, labels, transitions)
+        short = 0      # 21-49 words (definitions, brief points)
+        ideal = 0      # 50-150 words (complete thoughts, semantic clarity)
+        long = 0       # 151-250 words (acceptable but may lack focus)
+        very_long = 0  # 251+ words (likely multiple ideas, semantic drift)
+        
         for para in paragraphs:
             text = para.get_text(strip=True)
             word_count = len(text.split())
-            if 50 <= word_count <= 150:
-                ideal_chunks += 1
+            
+            if word_count <= 20:
+                tiny += 1
+            elif word_count <= 49:
+                short += 1
+            elif word_count <= 150:
+                ideal += 1
+            elif word_count <= 250:
+                long += 1
+            else:
+                very_long += 1
         
-        score = (ideal_chunks / len(paragraphs)) * 100
-        return round(score)
+        total = len(paragraphs)
+        
+        # WEIGHTED SCORING based on semantic clarity
+        # Not about AI processing limits - about information hierarchy
+        weighted_score = (
+            (ideal * 1.0) +      # Clear, focused single idea
+            (long * 0.75) +      # Acceptable but may cover multiple ideas
+            (short * 0.5) +      # Limited context but serves purpose
+            (tiny * 0.25) +      # Minimal semantic value (labels, captions)
+            (very_long * 0.25)   # Semantic drift, multiple ideas mixed
+        ) / total * 100
+        
+        return round(weighted_score)
     
     def _analyze_qa_format(self):
         """Analyze Q&A format optimization - IMPROVED for content type awareness"""
@@ -278,17 +302,21 @@ class AIOptimizationAnalyzer:
         # Chunkability with detailed context
         paragraphs = self.fetcher.soup.find_all('p')
         if paragraphs:
-            ideal_count = sum(1 for p in paragraphs if 50 <= len(p.get_text(strip=True).split()) <= 150)
-            too_short = sum(1 for p in paragraphs if len(p.get_text(strip=True).split()) < 50)
-            too_long = sum(1 for p in paragraphs if len(p.get_text(strip=True).split()) > 150)
+            # Categorize by semantic purpose
+            tiny = sum(1 for p in paragraphs if len(p.get_text(strip=True).split()) <= 20)
+            short = sum(1 for p in paragraphs if 21 <= len(p.get_text(strip=True).split()) <= 49)
+            ideal = sum(1 for p in paragraphs if 50 <= len(p.get_text(strip=True).split()) <= 150)
+            long = sum(1 for p in paragraphs if 151 <= len(p.get_text(strip=True).split()) <= 250)
+            very_long = sum(1 for p in paragraphs if len(p.get_text(strip=True).split()) > 250)
+            total = len(paragraphs)
             
-            if scores['chunkability'] < 50:
-                findings.append(f"✗ Poor paragraph structure: {ideal_count}/{len(paragraphs)} paragraphs optimal (50-150 words). {too_short} too short, {too_long} too long")
-                findings.append(f"💡 AI systems process content in chunks - paragraphs should be 50-150 words for optimal understanding")
-            elif scores['chunkability'] < 70:
-                findings.append(f"⚠ Paragraph structure needs work: {ideal_count}/{len(paragraphs)} optimal ({scores['chunkability']}%). {too_short} too short, {too_long} too long")
+            if scores['chunkability'] >= 80:
+                findings.append(f"✓ Excellent paragraph structure: {ideal} focused paragraphs (50-150 words), {long} longer narrative paragraphs - clear semantic organization")
+            elif scores['chunkability'] >= 60:
+                findings.append(f"⚠ Moderate paragraph structure: {ideal} ideal, {short} brief, {long} long, {very_long} very long - could improve semantic clarity")
             else:
-                findings.append(f"✓ Excellent: {ideal_count}/{len(paragraphs)} paragraphs ({scores['chunkability']}%) are optimally sized for AI processing")
+                findings.append(f"✗ Poor paragraph structure: {ideal}/{total} paragraphs have clear focus (50-150 words). {tiny} minimal, {short} brief, {long} long, {very_long} very long")
+                findings.append(f"💡 Break long paragraphs (251+ words) into focused units - improves semantic clarity for both humans and AI")
         else:
             findings.append("✗ No paragraph tags found - content structure is unclear to AI systems")
         
@@ -409,12 +437,14 @@ class AIOptimizationAnalyzer:
         if scores['chunkability'] < 50:
             recommendations.append({
                 'priority': 'MEDIUM',
-                'title': 'Improve content chunkability',
+                'title': 'Improve paragraph structure for semantic clarity',
                 'details': [
-                    'Break long paragraphs into 50-150 word chunks',
-                    'Use clear section breaks',
-                    'Add subheadings every 200-300 words',
-                    'Use lists for scannable content'
+                    'Break paragraphs with 251+ words into smaller, focused units',
+                    'Each paragraph should convey one clear idea or concept',
+                    'Aim for 50-150 words per paragraph for optimal semantic clarity',
+                    'Use topic sentences to clearly state paragraph focus',
+                    'This improves information hierarchy for both humans and AI',
+                    'Note: This is about semantic organization, not AI processing limits'
                 ]
             })
         
