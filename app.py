@@ -1,4 +1,4 @@
-"""AI Website Grader - Streamlit Application for Snowflake (Flat File Structure)"""
+"""AI Website Grader - Streamlit Application"""
 
 import streamlit as st
 from datetime import datetime
@@ -168,17 +168,24 @@ if analyze_button and url_input:
                 time.sleep(0.5)
                 progress_bar.progress(25)
                 
-                # Stage 2: Content Analysis
+                # Stage 2: Performance Analysis (MOVED TO FIRST - CRITICAL FIX)
+                status_text.markdown(f"**🚀 Checking performance metrics...**\n\n*{status_messages[1]}*")
+                
+                perf_analyzer = PerformanceAnalyzer(url_input)
+                perf_result = perf_analyzer.analyze()
+                progress_bar.progress(35)
+                
+                # Stage 3: Content Analysis
                 status_text.markdown(f"**📝 Analyzing content structure...**\n\n*{status_messages[0]}*")
                 
-                # Run all analyzers
+                # Run all analyzers (now with perf_result available)
                 ai_opt_analyzer = AIOptimizationAnalyzer(fetcher)
                 ai_opt_result = ai_opt_analyzer.analyze()
-                progress_bar.progress(35)
+                progress_bar.progress(45)
                 
                 eeat_analyzer = EEATAnalyzer(fetcher)
                 eeat_result = eeat_analyzer.analyze()
-                progress_bar.progress(45)
+                progress_bar.progress(50)
                 
                 tech_seo_analyzer = TechnicalSEOAnalyzer(fetcher)
                 tech_seo_result = tech_seo_analyzer.analyze()
@@ -188,7 +195,9 @@ if analyze_button and url_input:
                 content_result = content_analyzer.analyze()
                 progress_bar.progress(65)
                 
-                mobile_analyzer = MobileOptimizationAnalyzer(fetcher)
+                # CRITICAL FIX: Pass perf_result to mobile analyzer
+                status_text.markdown(f"**📱 Analyzing mobile experience...**\n\n*{status_messages[2]}*")
+                mobile_analyzer = MobileOptimizationAnalyzer(fetcher, perf_result)
                 mobile_result = mobile_analyzer.analyze()
                 progress_bar.progress(75)
                 
@@ -199,13 +208,6 @@ if analyze_button and url_input:
                 crawl_analyzer = TechnicalCrawlabilityAnalyzer(fetcher)
                 crawl_result = crawl_analyzer.analyze()
                 progress_bar.progress(85)
-                
-                # Stage 3: Performance APIs
-                status_text.markdown(f"**🚀 Checking performance metrics...**\n\n*{status_messages[1]}*")
-                
-                perf_analyzer = PerformanceAnalyzer(url_input)
-                perf_result = perf_analyzer.analyze()
-                progress_bar.progress(95)
                 
                 # Stage 4: Scoring
                 status_text.markdown(f"**🎯 Calculating final scores...**\n\n*{status_messages[2]}*")
