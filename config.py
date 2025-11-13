@@ -27,6 +27,11 @@ PAGESPEED_API_URL = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 # W3C HTML Validator (Public endpoint - no key needed)
 W3C_VALIDATOR_URL = "https://validator.w3.org/nu/"
 
+# Add Firecrawl configuration
+FIRECRAWL_API_KEY = os.getenv('FIRECRAWL_API_KEY', None)
+USE_FIRECRAWL_DEFAULT = False
+MAX_CRAWL_PAGES = 50
+
 # ============================================================================
 # Scoring Weights (must sum to 1.0)
 # ============================================================================
