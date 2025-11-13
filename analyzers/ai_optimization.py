@@ -269,6 +269,12 @@ class AIOptimizationAnalyzer:
         """Generate key findings with specific details - ENHANCED"""
         findings = []
         
+        # CRITICAL: Check for JavaScript-heavy site first
+        if self.word_count < 100:
+            findings.append(f"⚠ CRITICAL: Only {self.word_count} words extracted - this appears to be a JavaScript-heavy site")
+            findings.append(f"💡 Most content may be loading via JavaScript - AI crawlers may see limited content")
+            findings.append(f"💡 Consider implementing server-side rendering (SSR) or static site generation (SSG)")
+        
         # Chunkability with detailed context
         paragraphs = self.fetcher.soup.find_all('p')
         if paragraphs:
