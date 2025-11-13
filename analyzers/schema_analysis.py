@@ -425,6 +425,8 @@ class SchemaAnalyzer:
         return recommendations
 
 
+"""Technical Crawlability Analysis - ENHANCED with Detailed Findings"""
+
 class TechnicalCrawlabilityAnalyzer:
     def __init__(self, fetcher):
         self.fetcher = fetcher
@@ -451,14 +453,17 @@ class TechnicalCrawlabilityAnalyzer:
     def _analyze_robots_access(self):
         """Analyze robots.txt and meta robots"""
         score = 100
+        issues = []
         
         # Check robots meta tag
         robots_meta = self.fetcher.check_robots_meta()
         if robots_meta:
             if 'noindex' in robots_meta.lower():
                 score -= 50
+                issues.append('noindex')
             if 'nofollow' in robots_meta.lower():
                 score -= 30
+                issues.append('nofollow')
         
         return max(0, score)
     
@@ -503,41 +508,207 @@ class TechnicalCrawlabilityAnalyzer:
             return 40
     
     def _generate_findings(self, scores):
-        """Generate key findings"""
+        """Generate detailed, actionable findings - ENHANCED"""
         findings = []
         
-        if scores['robots_access'] < 100:
-            findings.append("Robots access may be restricted")
+        # ROBOTS ACCESS
+        robots_meta = self.fetcher.check_robots_meta()
         
-        if scores['javascript_dependency'] < 70:
-            findings.append("Heavy JavaScript dependency may affect crawlability")
+        if robots_meta:
+            if 'noindex' in robots_meta.lower():
+                findings.append("✗ CRITICAL: Page has 'noindex' directive - blocking search engines from indexing this page")
+            if 'nofollow' in robots_meta.lower():
+                findings.append("⚠ Page has 'nofollow' directive - search engines won't follow links on this page")
+            
+            if 'noindex' not in robots_meta.lower() and 'nofollow' not in robots_meta.lower():
+                findings.append(f"✓ Robots meta tag present with permissive settings: {robots_meta}")
+        else:
+            findings.append("✓ No robots meta restrictions - page is indexable")
+        
+        # ROBOTS.TXT
+        robots_txt = self.fetcher.fetch_robots_txt()
+        if robots_txt:
+            if 'Disallow: /' in robots_txt:
+                findings.append("✗ CRITICAL: robots.txt contains 'Disallow: /' - blocking all crawlers from entire site")
+            else:
+                # Count specific disallows
+                disallow_count = robots_txt.count('Disallow:')
+                if disallow_count > 10:
+                    findings.append(f"⚠ robots.txt has {disallow_count} Disallow rules - verify these are intentional")
+                elif disallow_count > 0:
+                    findings.append(f"✓ robots.txt exists with {disallow_count} specific Disallow rules (targeted blocking)")
+                else:
+                    findings.append("✓ robots.txt exists with no restrictions - full site access granted")
+        else:
+            findings.append("⚠ No robots.txt found - consider adding one for crawler guidance")
+        
+        # BOT ACCESSIBILITY
+        text = self.fetcher.get_text_content().lower()
+        has_captcha = 'captcha' in text or 'bot detection' in text or 'cloudflare' in text
+        
+        if has_captcha:
+            findings.append("⚠ Page may contain CAPTCHA or bot detection - can block AI crawlers")
+        else:
+            findings.append("✓ No obvious bot blocking mechanisms detected")
+        
+        # CONTENT DELIVERY
+        status_code = self.fetcher.status_code
+        
+        if status_code == 200:
+            findings.append(f"✓ Excellent: Page returns HTTP 200 (OK) - content delivered successfully")
+        elif status_code in [301, 302]:
+            findings.append(f"⚠ Page redirects (HTTP {status_code}) - consolidates properly but adds latency")
+        elif status_code == 404:
+            findings.append(f"✗ CRITICAL: HTTP 404 (Not Found) - page doesn't exist or is broken")
+        elif status_code >= 500:
+            findings.append(f"✗ CRITICAL: Server error (HTTP {status_code}) - content not accessible")
+        else:
+            findings.append(f"⚠ Unexpected status code: HTTP {status_code}")
+        
+        # JAVASCRIPT DEPENDENCY
+        word_count = len(self.fetcher.get_text_content().split())
+        
+        if word_count > 500:
+            findings.append(f"✓ Excellent: {word_count} words available in initial HTML - minimal JavaScript dependency")
+        elif word_count > 100:
+            findings.append(f"✓ Good: {word_count} words in initial HTML - content accessible to basic crawlers")
+        elif word_count > 50:
+            findings.append(f"⚠ Moderate JavaScript dependency - only {word_count} words in initial HTML (may require JS rendering)")
+        else:
+            findings.append(f"✗ Heavy JavaScript dependency - only {word_count} words in initial HTML - AI crawlers may miss content")
+        
+        # Check for semantic HTML
+        has_main = self.fetcher.soup.find('main') is not None
+        has_article = self.fetcher.soup.find('article') is not None
+        
+        if has_main or has_article:
+            findings.append(f"✓ Semantic HTML detected (<main> or <article>) - helps crawlers identify primary content")
+        else:
+            findings.append("⚠ No semantic HTML5 tags (<main>, <article>) - harder for crawlers to identify main content")
+        
+        # XML SITEMAP
+        sitemap_url = f"{self.fetcher.url.rstrip('/')}/sitemap.xml"
+        findings.append(f"💡 TIP: Verify XML sitemap exists at {sitemap_url} for optimal crawling")
+        
+        # OVERALL ASSESSMENT
+        avg_score = sum(scores.values()) / len(scores)
+        if avg_score < 50:
+            findings.append("⚠ CRITICAL: Overall crawlability is poor - AI systems may struggle to access and index your content")
+        elif avg_score < 70:
+            findings.append("⚠ Crawlability needs improvement - some AI crawlers may have limited access")
+        else:
+            findings.append("✓ Good overall crawlability - content is accessible to AI systems and search engines")
         
         return findings
     
     def _generate_recommendations(self, scores):
-        """Generate recommendations"""
+        """Generate detailed, prioritized recommendations - ENHANCED"""
         recommendations = []
         
         if scores['robots_access'] < 100:
+            robots_meta = self.fetcher.check_robots_meta()
+            
+            details = []
+            if robots_meta and 'noindex' in robots_meta.lower():
+                details.append('CRITICAL: Remove "noindex" directive from meta robots tag immediately')
+                details.append('This is blocking search engines and AI crawlers from indexing your page')
+                details.append('If intentional, verify this page should be hidden from search')
+            
+            if robots_meta and 'nofollow' in robots_meta.lower():
+                details.append('Consider removing "nofollow" directive unless you specifically want to prevent link following')
+                details.append('This prevents search engines from discovering other pages through your links')
+            
+            robots_txt = self.fetcher.fetch_robots_txt()
+            if robots_txt and 'Disallow: /' in robots_txt:
+                details.append('CRITICAL: robots.txt blocks entire site with "Disallow: /"')
+                details.append('Remove this or make it specific to certain paths only')
+            
+            if details:
+                recommendations.append({
+                    'priority': 'CRITICAL',
+                    'title': 'Fix robots directives blocking crawlers',
+                    'details': details
+                })
+        
+        if scores['bot_accessibility'] < 70:
             recommendations.append({
                 'priority': 'HIGH',
-                'title': 'Review robots.txt and meta robots settings',
+                'title': 'Improve bot accessibility',
                 'details': [
-                    'Ensure important pages are not blocked',
-                    'Remove unnecessary Disallow directives',
-                    'Check meta robots tags'
+                    'Audit CAPTCHA usage - avoid on content pages as it blocks AI crawlers',
+                    'If using Cloudflare or bot protection, whitelist known AI crawler user-agents',
+                    'Implement rate limiting instead of blanket bot blocking',
+                    'Test your site with common AI crawler user-agents (GPTBot, Claude-Web, etc.)',
+                    'Check robots.txt for overly restrictive "Disallow" rules',
+                    'Ensure your CDN/firewall isn\'t blocking legitimate AI crawlers',
+                    'Monitor server logs for bot access patterns and adjust blocking rules'
                 ]
             })
         
+        if scores['content_delivery'] < 80:
+            status_code = self.fetcher.status_code
+            
+            details = []
+            if status_code in [301, 302]:
+                details.append(f'Page uses redirects (HTTP {status_code}) - consolidate to final URL when possible')
+                details.append('Excessive redirect chains slow down crawler access')
+                details.append('Use 301 redirects for permanent moves, 302 for temporary')
+            elif status_code == 404:
+                details.append('Page returns 404 Not Found - fix broken links or restore content')
+                details.append('Update sitemap to remove dead pages')
+                details.append('Implement proper 410 (Gone) for permanently deleted content')
+            elif status_code >= 500:
+                details.append(f'Server error (HTTP {status_code}) - urgent server-side fix needed')
+                details.append('Check server logs for root cause')
+                details.append('Implement health monitoring and alerting')
+            
+            if details:
+                recommendations.append({
+                    'priority': 'HIGH' if status_code >= 400 else 'MEDIUM',
+                    'title': 'Fix content delivery issues',
+                    'details': details
+                })
+        
         if scores['javascript_dependency'] < 70:
+            word_count = len(self.fetcher.get_text_content().split())
+            
             recommendations.append({
-                'priority': 'MEDIUM',
-                'title': 'Reduce JavaScript dependency for content',
+                'priority': 'HIGH',
+                'title': 'Reduce JavaScript dependency for AI accessibility',
                 'details': [
-                    'Render critical content in HTML',
-                    'Use server-side rendering',
-                    'Implement progressive enhancement'
+                    f'Current: Only {word_count} words available in initial HTML',
+                    f'Goal: Deliver 300+ words of main content in HTML (before JavaScript)',
+                    'Implement server-side rendering (SSR) or static site generation (SSG)',
+                    'Use progressive enhancement - deliver core content in HTML, enhance with JS',
+                    'For React/Vue apps: use Next.js, Nuxt.js, or similar frameworks with SSR',
+                    'Avoid client-side only rendering for content pages',
+                    'Test with JavaScript disabled to see what crawlers see',
+                    'Use dynamic rendering (detect crawler user-agents, serve pre-rendered HTML)',
+                    'Implement proper <noscript> fallbacks for critical content'
                 ]
             })
+        
+        # Always include best practices
+        recommendations.append({
+            'priority': 'BEST PRACTICE',
+            'title': 'Crawlability optimization checklist',
+            'details': [
+                'Create and submit XML sitemap to Google Search Console',
+                'Implement proper canonical tags to avoid duplicate content',
+                'Use descriptive, SEO-friendly URLs (avoid IDs and parameters when possible)',
+                'Ensure proper use of rel="nofollow" on user-generated content links',
+                'Implement proper 404 and 410 status codes for missing content',
+                'Set up Google Search Console and monitor for crawl errors',
+                'Create robots.txt with strategic Disallow rules (block admin, private sections)',
+                'Add Sitemap location to robots.txt file',
+                'Test crawlability with Google Search Console URL Inspection tool',
+                'Monitor server response times - aim for <200ms TTFB',
+                'Use semantic HTML5 tags (<main>, <article>, <nav>, <aside>)',
+                'Implement breadcrumb navigation for site structure',
+                'Ensure internal linking connects all important pages (3 clicks from homepage)',
+                'Use rel="alternate" for mobile versions if separate',
+                'Implement hreflang tags for international/multilingual sites'
+            ]
+        })
         
         return recommendations
