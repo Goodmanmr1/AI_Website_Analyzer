@@ -1,4 +1,4 @@
-"""AI Website Grader - Streamlit Application"""
+"""AI Website Grader - Streamlit Application with Firecrawl Integration"""
 
 import streamlit as st
 from datetime import datetime
@@ -29,6 +29,11 @@ def is_valid_url(url):
         return all([result.scheme in ['http', 'https'], result.netloc])
     except:
         return False
+
+# Check if Firecrawl is available
+def is_firecrawl_available():
+    """Check if Firecrawl API key is configured"""
+    return bool(config.FIRECRAWL_API_KEY)
 
 # Page configuration
 st.set_page_config(
@@ -86,6 +91,16 @@ st.markdown("""
         padding: 0.5rem 0;
         border-bottom: 1px solid #f3f4f6;
     }
+    .firecrawl-badge {
+        background: linear-gradient(135deg, #ff6b35, #f77737);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-left: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -96,10 +111,11 @@ st.markdown('<p class="subtitle">Evaluate your site\'s performance for AI-powere
 # Main content
 st.markdown("---")
 
-# Input section
+# Input section with enhanced options
 st.markdown("### Enter Website URL")
 st.markdown("Provide the URL of any publicly accessible website to receive a comprehensive analysis.")
 
+# Create columns for input and options
 col1, col2 = st.columns([3, 1])
 
 with col1:
@@ -111,6 +127,31 @@ with col1:
 
 with col2:
     analyze_button = st.button("START ANALYSIS", type="primary", use_container_width=True)
+
+# Advanced options section
+with st.expander("⚙️ Advanced Options", expanded=False):
+    col_opt1, col_opt2 = st.columns(2)
+    
+    with col_opt1:
+        # Firecrawl toggle with availability check
+        if is_firecrawl_available():
+            use_firecrawl = st.checkbox(
+                "🔥 **Use Firecrawl** (Enhanced for JavaScript sites)",
+                value=config.USE_FIRECRAWL_DEFAULT,
+                help="Firecrawl provides better content extraction for JavaScript-heavy sites, SPAs, and dynamic content. Recommended if standard analysis shows low word count."
+            )
+        else:
+            use_firecrawl = False
+            st.info("🔥 **Firecrawl not configured** - Add FIRECRAWL_API_KEY to enable enhanced scraping for JavaScript sites")
+    
+    with col_opt2:
+        # Option to provide API key
+        user_firecrawl_key = st.text_input(
+            "Firecrawl API Key (optional)",
+            type="password",
+            help="Provide your own Firecrawl API key for enhanced scraping. Get one at firecrawl.dev",
+            placeholder="fc-..."
+        )
 
 # Feature highlights
 st.markdown("")
@@ -136,6 +177,16 @@ with col3:
     Review technical SEO, structured data, and crawlability for search engines.
     """)
 
+# Show Firecrawl benefits if selected
+if use_firecrawl or user_firecrawl_key:
+    st.info("""
+    **🔥 Firecrawl Enhanced Mode Active**
+    - Better JavaScript rendering and SPA support
+    - Clean markdown extraction for improved AI analysis
+    - Advanced content structuring
+    - LLM-powered insight extraction
+    """)
+
 # Analysis logic
 if analyze_button and url_input:
     # Validate URL
@@ -158,17 +209,60 @@ if analyze_button and url_input:
             ]
             
             try:
+                # Determine which fetcher to use
+                use_enhanced_fetcher = False
+                firecrawl_api_key = None
+                
+                if user_firecrawl_key:
+                    # User provided their own key
+                    use_enhanced_fetcher = True
+                    firecrawl_api_key = user_firecrawl_key
+                elif use_firecrawl and is_firecrawl_available():
+                    # Use system Firecrawl key
+                    use_enhanced_fetcher = True
+                    firecrawl_api_key = config.FIRECRAWL_API_KEY
+                
                 # Stage 1: Fetching
-                status_text.markdown("**🌐 Fetching website data...**")
+                if use_enhanced_fetcher:
+                    status_text.markdown("**🔥 Fetching website with Firecrawl (enhanced mode)...**")
+                    st.markdown('<span class="firecrawl-badge">FIRECRAWL ACTIVE</span>', unsafe_allow_html=True)
+                else:
+                    status_text.markdown("**🌐 Fetching website data...**")
+                
                 progress_bar.progress(10)
                 
-                fetcher = WebsiteFetcher(url_input)
-                fetcher.fetch()
+                # Import and use appropriate fetcher
+                if use_enhanced_fetcher:
+                    try:
+                        from utils.fetcher_firecrawl import FirecrawlFetcher
+                        fetcher = FirecrawlFetcher(url_input, api_key=firecrawl_api_key)
+                        fetcher.fetch()
+                        
+                        # Show enhanced insights if available
+                        insights = fetcher.get_structured_insights()
+                        if insights:
+                            with st.expander("🎯 AI-Extracted Insights", expanded=False):
+                                if 'questions_answered' in insights:
+                                    st.markdown("**Questions Answered:**")
+                                    for q in insights['questions_answered'][:5]:
+                                        st.markdown(f"- {q}")
+                                if 'key_facts' in insights:
+                                    st.markdown("**Key Facts:**")
+                                    for fact in insights['key_facts'][:5]:
+                                        st.markdown(f"- {fact}")
+                    except Exception as e:
+                        # Fallback to standard fetcher if Firecrawl fails
+                        st.warning(f"⚠️ Firecrawl failed, using standard fetcher: {str(e)}")
+                        fetcher = WebsiteFetcher(url_input)
+                        fetcher.fetch()
+                else:
+                    fetcher = WebsiteFetcher(url_input)
+                    fetcher.fetch()
                 
                 time.sleep(0.5)
                 progress_bar.progress(25)
                 
-                # Stage 2: Performance Analysis (MOVED TO FIRST - CRITICAL FIX)
+                # Stage 2: Performance Analysis
                 status_text.markdown(f"**🚀 Checking performance metrics...**\n\n*{status_messages[1]}*")
                 
                 perf_analyzer = PerformanceAnalyzer(url_input)
@@ -178,7 +272,7 @@ if analyze_button and url_input:
                 # Stage 3: Content Analysis
                 status_text.markdown(f"**📝 Analyzing content structure...**\n\n*{status_messages[0]}*")
                 
-                # Run all analyzers (now with perf_result available)
+                # Run all analyzers
                 ai_opt_analyzer = AIOptimizationAnalyzer(fetcher)
                 ai_opt_result = ai_opt_analyzer.analyze()
                 progress_bar.progress(45)
@@ -195,7 +289,6 @@ if analyze_button and url_input:
                 content_result = content_analyzer.analyze()
                 progress_bar.progress(65)
                 
-                # CRITICAL FIX: Pass perf_result to mobile analyzer
                 status_text.markdown(f"**📱 Analyzing mobile experience...**\n\n*{status_messages[2]}*")
                 mobile_analyzer = MobileOptimizationAnalyzer(fetcher, perf_result)
                 mobile_result = mobile_analyzer.analyze()
@@ -236,6 +329,10 @@ if analyze_button and url_input:
                 st.markdown("---")
                 st.markdown("# 📄 Analysis Results")
                 
+                # Show if Firecrawl was used
+                if use_enhanced_fetcher:
+                    st.markdown('<span class="firecrawl-badge">Enhanced with Firecrawl</span>', unsafe_allow_html=True)
+                
                 # Website info and overall score
                 col1, col2 = st.columns([2, 1])
                 
@@ -244,6 +341,14 @@ if analyze_button and url_input:
                     st.markdown(f"**URL:** {url_input}")
                     st.markdown(f"**Page Title:** {fetcher.get_title()}")
                     st.markdown(f"**Report Generated:** {datetime.now().strftime('%B %d, %Y')}")
+                    st.markdown(f"**Analysis Mode:** {'🔥 Firecrawl Enhanced' if use_enhanced_fetcher else '⚡ Standard'}")
+                    
+                    # Show word count - important indicator
+                    word_count = fetcher.get_word_count()
+                    if word_count < 100:
+                        st.warning(f"⚠️ **Low content extracted:** {word_count} words - Consider using Firecrawl mode for JavaScript sites")
+                    else:
+                        st.markdown(f"**Content Extracted:** {word_count} words")
                 
                 with col2:
                     st.markdown('<div class="score-card">', unsafe_allow_html=True)
@@ -276,6 +381,13 @@ if analyze_button and url_input:
                         category_results,
                         perf_result
                     )
+                    
+                    # Add Firecrawl note to report if used
+                    if use_enhanced_fetcher:
+                        markdown_report = markdown_report.replace(
+                            "## Executive Summary",
+                            "## Executive Summary\n\n*This report was generated using Firecrawl enhanced scraping for improved JavaScript content extraction.*"
+                        )
                     
                     st.download_button(
                         label="📄 Export Markdown",
@@ -332,13 +444,22 @@ if analyze_button and url_input:
                 
                 st.success("✅ Analysis completed successfully!")
                 
+                # Firecrawl recommendation if low content and not using it
+                if word_count < 200 and not use_enhanced_fetcher:
+                    st.info("""
+                    💡 **Tip: Low Content Detected**
+                    
+                    Only {word_count} words were extracted, which suggests this might be a JavaScript-heavy site.
+                    Consider re-running the analysis with **Firecrawl enabled** in Advanced Options for better content extraction.
+                    """.format(word_count=word_count))
+                
             except Exception as e:
                 progress_container.empty()
                 st.error(f"❌ Analysis Error: {str(e)}")
                 st.info("💡 **Troubleshooting Tips:**\n\n"
                        "- Verify the URL is correct and includes https:// or http://\n"
                        "- Ensure the website is publicly accessible (not behind a login)\n"
-                       "- If you see 'Unable to connect to external service', check that External Access Integration is configured in Snowflake\n"
+                       "- If you're seeing JavaScript/content issues, try enabling Firecrawl in Advanced Options\n"
                        "- Some websites may block automated access - try a different URL")
 
 # Footer
@@ -358,7 +479,36 @@ with st.expander("📚 How This Tool Works"):
     - **Content Quality (10%):** Depth, comprehensiveness, and readability of content
     - **Trust Signals (7%):** Indicators of expertise, authority, and credibility
     
-    **Technology:** This tool uses open-source libraries and free public APIs for analysis, requiring no AI API tokens.
+    **Technology Stack:**
+    - **Standard Mode:** Uses open-source libraries (BeautifulSoup, Requests) for basic HTML extraction
+    - **Firecrawl Mode:** Advanced JavaScript rendering, markdown extraction, and LLM-powered insights
+    - **APIs:** Google PageSpeed Insights and W3C Validator for performance metrics
+    """)
+
+with st.expander("🔥 About Firecrawl Integration"):
+    st.markdown("""
+    **What is Firecrawl?**
+    
+    Firecrawl is an advanced web scraping API that excels at extracting content from modern websites,
+    especially those heavy on JavaScript, SPAs (Single Page Applications), and dynamic content.
+    
+    **When to Use Firecrawl:**
+    - Website shows very low word count (< 200 words) in standard mode
+    - Site is known to use React, Vue, Angular, or other JS frameworks
+    - Content loads dynamically after page load
+    - You need clean markdown extraction
+    - You want AI-powered content insights
+    
+    **Benefits:**
+    - Renders JavaScript before extraction
+    - Provides clean, structured markdown
+    - Extracts content that standard scrapers miss
+    - Offers LLM-powered content analysis
+    
+    **How to Enable:**
+    1. Click "Advanced Options" above the analyze button
+    2. Check "Use Firecrawl" or provide your own API key
+    3. Get a free API key at [firecrawl.dev](https://firecrawl.dev) (500 credits/month free)
     """)
 
 with st.expander("🎯 Understanding Your Score"):
@@ -378,4 +528,4 @@ with st.expander("🎯 Understanding Your Score"):
     """)
 
 st.markdown("---")
-st.markdown("*Powered by Streamlit • Open Source Analysis Tool*")
+st.markdown("*Powered by Streamlit • Enhanced with Firecrawl • Open Source Analysis Tool*")
