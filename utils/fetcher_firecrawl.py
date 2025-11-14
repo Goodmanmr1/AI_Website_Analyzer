@@ -7,7 +7,7 @@ import json
 import re
 
 class FirecrawlFetcher:
-    """Enhanced fetcher using Firecrawl for JavaScript-heavy sites"""
+    """Enhanced fetcher using Firecrawl V2 API for JavaScript-heavy sites"""
     
     def __init__(self, url, api_key=None):
         self.url = url
@@ -16,7 +16,7 @@ class FirecrawlFetcher:
         if not self.api_key:
             raise ValueError("Firecrawl API key is required. Set FIRECRAWL_API_KEY environment variable or pass api_key parameter.")
         
-        # Initialize Firecrawl with the correct API
+        # Initialize Firecrawl with the V2 API
         self.app = Firecrawl(api_key=self.api_key)
         self.scraped_data = None
         self.soup = None
@@ -25,89 +25,96 @@ class FirecrawlFetcher:
         self.html_content = None
         
     def fetch(self):
-        """Fetch using Firecrawl V2 API with advanced capabilities"""
+        """Fetch using Firecrawl V2 API - Returns object with attributes, not dict"""
         try:
-            # Use the correct V2 scrape method from Firecrawl SDK
-            # Note: 'metadata' is NOT a valid format - metadata is returned automatically
-            # Valid formats: markdown, html, rawHtml, links, images, screenshot, summary, 
-            #                changeTracking, json, attributes, branding
-            self.scraped_data = self.app.scrape(
+            # V2 API: scrape() returns an object with attributes like .markdown, .html
+            # NOT a dictionary - this was the main issue!
+            scrape_result = self.app.scrape(
                 url=self.url,
-                formats=['markdown', 'html', 'links'],
-                wait_for=3000,  # Wait 3 seconds for JavaScript to render
-                only_main_content=False  # Get full page for complete analysis
+                formats=['markdown', 'html', 'links']
             )
             
-            if self.scraped_data:
-                # The response structure for V2 API
-                # Set status code
+            if scrape_result:
                 self.status_code = 200
                 
-                # Extract markdown and HTML from the response
-                self.markdown_content = self.scraped_data.get('markdown', '')
-                self.html_content = self.scraped_data.get('html', '')
+                # KEY FIX: Access as attributes, not dictionary
+                # The V2 SDK returns an object with attributes like scrape_result.markdown
+                try:
+                    # Try attribute access (correct for V2)
+                    self.markdown_content = scrape_result.markdown if hasattr(scrape_result, 'markdown') else ''
+                    self.html_content = scrape_result.html if hasattr(scrape_result, 'html') else ''
+                    
+                    # Debug: if both are empty, try inspecting the object
+                    if not self.markdown_content and not self.html_content:
+                        # Try to get the data attribute (alternative structure)
+                        if hasattr(scrape_result, 'data'):
+                            data = scrape_result.data
+                            self.markdown_content = data.get('markdown', '') if isinstance(data, dict) else ''
+                            self.html_content = data.get('html', '') if isinstance(data, dict) else ''
+                        
+                except AttributeError as e:
+                    raise Exception(f"Unexpected response structure from Firecrawl: {str(e)}. Response object: {type(scrape_result)}")
                 
                 # If no HTML but we have markdown, create basic HTML
                 if not self.html_content and self.markdown_content:
-                    self.html_content = f"<html><body>{self.markdown_content}</body></html>"
+                    self.html_content = self._markdown_to_html(self.markdown_content)
                 
                 # Create BeautifulSoup object for compatibility with existing analyzers
                 if self.html_content:
                     self.soup = BeautifulSoup(self.html_content, 'lxml')
+                elif self.markdown_content:
+                    # Fallback: wrap markdown in HTML tags if no HTML provided
+                    html = self._markdown_to_html(self.markdown_content)
+                    self.soup = BeautifulSoup(html, 'lxml')
                 
                 return True
             else:
                 raise Exception("No data returned from Firecrawl")
                 
-        except AttributeError as e:
-            # If 'scrape' doesn't exist, try 'v1.scrape_url' as fallback
-            try:
-                self.scraped_data = self.app.v1.scrape_url(
-                    self.url,
-                    formats=['markdown', 'html']
-                )
-                
-                if self.scraped_data:
-                    self.status_code = 200
-                    self.markdown_content = self.scraped_data.get('markdown', '')
-                    self.html_content = self.scraped_data.get('html', self.scraped_data.get('content', ''))
-                    
-                    if self.html_content:
-                        self.soup = BeautifulSoup(self.html_content, 'lxml')
-                    
-                    return True
-                else:
-                    raise Exception("No data returned from Firecrawl v1")
-                    
-            except Exception as e2:
-                raise Exception(f"Firecrawl fetch failed (both v2 and v1): {str(e2)}")
-                
         except Exception as e:
-            # Fallback status code
-            self.status_code = 500
-            raise Exception(f"Firecrawl fetch failed: {str(e)}")
+            error_msg = str(e)
+            
+            # Provide helpful error messages
+            if "unauthorized" in error_msg.lower() or "invalid" in error_msg.lower() or "401" in error_msg:
+                raise Exception(f"❌ Firecrawl API Error: Invalid API key. Check your FIRECRAWL_API_KEY. Full error: {error_msg}")
+            elif "403" in error_msg or "forbidden" in error_msg.lower():
+                raise Exception(f"❌ Firecrawl API Error: Access forbidden. Your API key may not have permission for this operation. Error: {error_msg}")
+            elif "timeout" in error_msg.lower():
+                raise Exception(f"❌ Firecrawl request timed out: The target website took too long to respond. Error: {error_msg}")
+            elif "rate" in error_msg.lower():
+                raise Exception(f"❌ Firecrawl Rate Limited: You've exceeded your API quota. Error: {error_msg}")
+            else:
+                raise Exception(f"❌ Firecrawl fetch failed: {error_msg}")
+    
+    def _markdown_to_html(self, markdown_text):
+        """Convert markdown to basic HTML for BeautifulSoup parsing"""
+        html = markdown_text
+        
+        # Convert markdown headers to HTML
+        html = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
+        html = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
+        html = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
+        
+        # Convert markdown lists to HTML
+        html = re.sub(r'^\- (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
+        
+        # Convert paragraph breaks
+        html = re.sub(r'\n\n+', '</p><p>', html)
+        
+        # Wrap in HTML tags
+        html = f"<html><body><p>{html}</p></body></html>"
+        return html
     
     def get_title(self):
         """Extract page title"""
-        # Try from metadata first (metadata is automatically returned, not requested as format)
-        if self.scraped_data and isinstance(self.scraped_data, dict):
-            metadata = self.scraped_data.get('metadata', {})
-            if metadata and 'title' in metadata:
-                return metadata['title'].strip()
-            
-            # Try direct title field
-            if 'title' in self.scraped_data:
-                return self.scraped_data['title'].strip()
-        
-        # Fallback to soup
         if self.soup:
             title_tag = self.soup.find('title')
             return title_tag.get_text().strip() if title_tag else ""
         
-        # Try to extract from markdown
+        # Try to extract from first H1 in markdown
         if self.markdown_content:
             lines = self.markdown_content.split('\n')
-            for line in lines[:5]:  # Check first 5 lines
+            for line in lines[:10]:
                 if line.startswith('# '):
                     return line[2:].strip()
         
@@ -115,35 +122,30 @@ class FirecrawlFetcher:
     
     def get_meta_description(self):
         """Extract meta description"""
-        # Try from metadata
-        if self.scraped_data and isinstance(self.scraped_data, dict):
-            metadata = self.scraped_data.get('metadata', {})
-            if metadata and 'description' in metadata:
-                return metadata['description'].strip()
-            
-            # Try direct description field
-            if 'description' in self.scraped_data:
-                return self.scraped_data['description'].strip()
-        
-        # Fallback to soup
         if self.soup:
             meta_desc = self.soup.find('meta', attrs={'name': 'description'})
             if meta_desc and meta_desc.get('content'):
                 return meta_desc['content'].strip()
         
+        # Fallback to first paragraph
+        if self.markdown_content:
+            lines = [l.strip() for l in self.markdown_content.split('\n') if l.strip() and not l.startswith('#')]
+            if lines:
+                desc = lines[0][:160]
+                return desc
+        
         return ""
     
     def get_headings(self):
-        """Extract all headings (H1-H6)"""
+        """Extract all headings from markdown or HTML"""
         headings = {'h1': [], 'h2': [], 'h3': [], 'h4': [], 'h5': [], 'h6': []}
         
-        # Use markdown for cleaner heading extraction
+        # Extract from markdown (more reliable)
         if self.markdown_content:
             lines = self.markdown_content.split('\n')
             for line in lines:
                 line = line.strip()
                 if line.startswith('#'):
-                    # Count the number of # symbols
                     level = 0
                     for char in line:
                         if char == '#':
@@ -152,12 +154,11 @@ class FirecrawlFetcher:
                             break
                     
                     if 1 <= level <= 6:
-                        # Extract the heading text
                         heading_text = line[level:].strip()
                         if heading_text:
                             headings[f'h{level}'].append(heading_text)
         
-        # If no headings from markdown, fallback to soup
+        # Fallback to HTML if no markdown headings
         if not any(headings.values()) and self.soup:
             for level in range(1, 7):
                 tag = f'h{level}'
@@ -169,9 +170,8 @@ class FirecrawlFetcher:
         return headings
     
     def get_text_content(self):
-        """Extract main text content"""
+        """Extract main text content from markdown"""
         if self.markdown_content:
-            # Remove markdown formatting for plain text
             text = self.markdown_content
             
             # Remove images
@@ -191,10 +191,6 @@ class FirecrawlFetcher:
             text = re.sub(r'```[^`]*```', '', text, flags=re.DOTALL)
             text = re.sub(r'`[^`]+`', '', text)
             
-            # Remove horizontal rules
-            text = re.sub(r'^-{3,}$', '', text, flags=re.MULTILINE)
-            text = re.sub(r'^\*{3,}$', '', text, flags=re.MULTILINE)
-            
             # Clean up whitespace
             lines = (line.strip() for line in text.splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
@@ -204,7 +200,6 @@ class FirecrawlFetcher:
         
         # Fallback to soup
         elif self.soup:
-            # Remove script and style elements
             for element in self.soup(["script", "style", "nav", "footer", "header"]):
                 element.decompose()
             
@@ -212,7 +207,6 @@ class FirecrawlFetcher:
             lines = (line.strip() for line in text.splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             text = ' '.join(chunk for chunk in chunks if chunk)
-            
             return text
         
         return ""
@@ -222,15 +216,13 @@ class FirecrawlFetcher:
         return self.markdown_content or ''
     
     def get_images(self):
-        """Extract all images with alt text information"""
+        """Extract images from HTML"""
         images = []
         
-        # First try to extract from HTML using soup
         if self.soup:
             for img in self.soup.find_all('img'):
                 alt_text = img.get('alt', '').strip()
                 has_alt_attr = 'alt' in img.attrs
-                
                 has_meaningful_alt = has_alt_attr and len(alt_text) > 0
                 is_decorative = has_alt_attr and len(alt_text) == 0
                 
@@ -242,49 +234,13 @@ class FirecrawlFetcher:
                     'missing_alt': not has_alt_attr
                 })
         
-        # Also check markdown for images if no HTML
-        elif self.markdown_content:
-            img_pattern = r'!\[([^\]]*)\]\(([^\)]+)\)'
-            for match in re.finditer(img_pattern, self.markdown_content):
-                alt_text = match.group(1).strip()
-                src = match.group(2).strip()
-                
-                has_meaningful_alt = len(alt_text) > 0
-                
-                images.append({
-                    'src': src,
-                    'alt': alt_text,
-                    'has_alt': has_meaningful_alt,
-                    'is_decorative': not has_meaningful_alt,
-                    'missing_alt': False
-                })
-        
         return images
     
     def get_links(self):
-        """Extract all links"""
+        """Extract internal and external links"""
         links = {'internal': [], 'external': [], 'invalid': []}
         
-        # Check if links are in the scraped data
-        if self.scraped_data and isinstance(self.scraped_data, dict):
-            if 'links' in self.scraped_data:
-                from urllib.parse import urlparse
-                base_domain = urlparse(self.url).netloc
-                
-                for link in self.scraped_data.get('links', []):
-                    if isinstance(link, str):
-                        try:
-                            link_domain = urlparse(link).netloc
-                            
-                            if link_domain == base_domain or not link_domain:
-                                links['internal'].append(link)
-                            else:
-                                links['external'].append(link)
-                        except:
-                            links['invalid'].append(link)
-        
-        # Fallback to soup-based extraction if no links found
-        if not links['internal'] and not links['external'] and self.soup:
+        if self.soup:
             from urllib.parse import urlparse, urljoin
             base_domain = urlparse(self.url).netloc
             
@@ -334,20 +290,11 @@ class FirecrawlFetcher:
         """Extract all meta tags"""
         meta_tags = {}
         
-        # First try from Firecrawl metadata
-        if self.scraped_data and isinstance(self.scraped_data, dict):
-            metadata = self.scraped_data.get('metadata', {})
-            
-            for key, value in metadata.items():
-                if value:
-                    meta_tags[key] = value
-        
-        # Add any additional from soup
         if self.soup:
             for meta in self.soup.find_all('meta'):
                 name = meta.get('name') or meta.get('property') or meta.get('http-equiv')
                 content = meta.get('content')
-                if name and content and name not in meta_tags:
+                if name and content:
                     meta_tags[name] = content
         
         return meta_tags
@@ -378,7 +325,7 @@ class FirecrawlFetcher:
         return len(meaningful_words)
     
     def fetch_robots_txt(self):
-        """Fetch and parse robots.txt using standard requests"""
+        """Fetch and parse robots.txt"""
         try:
             import requests
             from urllib.parse import urlparse
@@ -394,19 +341,12 @@ class FirecrawlFetcher:
         return None
     
     def get_structured_insights(self):
-        """Extract structured insights if available - gracefully degrade if not supported"""
-        # This feature may not be available in all Firecrawl plans or API versions
-        # Return None to gracefully degrade
-        try:
-            # Try to use extract if available (v2 feature)
-            if hasattr(self.app, 'extract'):
-                # Simple extraction without complex schema for compatibility
-                return {
-                    'content_length': len(self.markdown_content) if self.markdown_content else 0,
-                    'has_markdown': bool(self.markdown_content),
-                    'has_html': bool(self.html_content)
-                }
-        except:
-            pass
-        
-        return None
+        """Extract any structured insights from Firecrawl response (graceful degradation)"""
+        # This may not be available in all Firecrawl plans
+        # Return basic info instead
+        return {
+            'content_length': len(self.markdown_content) if self.markdown_content else 0,
+            'has_markdown': bool(self.markdown_content),
+            'has_html': bool(self.html_content),
+            'word_count': self.get_word_count()
+        }
